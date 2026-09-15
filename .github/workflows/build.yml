@@ -66,10 +66,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # upload-artifact strips the common prefix, so the artifact holds
+      # pwa/index.html and app/index.html. Unpack it back under src/ so every
+      # path below reads the same whether the file was just built or restored.
       - uses: actions/download-artifact@v4
         with:
           name: built
-          path: .
+          path: src
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -113,10 +116,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # upload-artifact strips the common prefix, so the artifact holds
+      # pwa/index.html and app/index.html. Unpack it back under src/ so every
+      # path below reads the same whether the file was just built or restored.
       - uses: actions/download-artifact@v4
         with:
           name: built
-          path: .
+          path: src
 
       # The service worker cache name is derived from the built page rather than
       # typed by hand. Forgetting to bump it made a deploy invisible until the
