@@ -118,6 +118,8 @@ jobs:
   deploy:
     needs: [build, test]
     runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -155,3 +157,30 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Publishing is not the same as being published. Eight batches of audio once
+  # failed to upload with no error at all, and only reading the repo back caught
+  # it. This job asks the live URL the same questions a phone would: is the deck
+  # whole, does a clip download, does the worker take over, does it still open
+  # with no network.
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: install a browser
+        run: |
+          set -eu
+          npm init -y >/dev/null
+          npm i playwright@1.49.1 >/dev/null
+          npx playwright install --with-deps chromium
+          sudo mkdir -p /opt/pw-browsers
+          sudo ln -sf "$(node -e "console.log(require('playwright').chromium.executablePath())")" /opt/pw-browsers/chromium
+      - name: the published site is the build we just made
+        run: |
+          set -eu
+          sleep 15
+          BASE="${{ needs.deploy.outputs.page_url }}" node src/tests/live_check.js
