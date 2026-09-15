@@ -83,6 +83,13 @@ jobs:
           npm init -y >/dev/null
           npm i playwright@1.49.1 >/dev/null
           npx playwright install --with-deps chromium
+          # The suites name the browser by absolute path so that the same file
+          # runs unchanged here and on the machine it was written on. Put the
+          # runner's chromium where they expect it rather than editing them,
+          # because a test that differs between the two places is not the test.
+          sudo mkdir -p /opt/pw-browsers
+          sudo ln -sf "$(node -e "console.log(require('playwright').chromium.executablePath())")" /opt/pw-browsers/chromium
+          test -x /opt/pw-browsers/chromium
 
       # Two things here are deliberate. The suites reach the app over
       # http://localhost, which is the only place the read-only test handle is
