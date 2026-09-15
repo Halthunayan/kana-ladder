@@ -1,0 +1,485 @@
+
+
+
+<div class="app">
+
+<!-- ============ HOME ============ -->
+<section class="screen on" id="s-home">
+  <div class="mast">
+    <h1><span class="seal">語</span> Kana Ladder</h1>
+    <div class="sub" id="syncLabel"><span class="syncdot off" id="syncDot"></span> local</div>
+  </div>
+
+  <div class="lvl" id="lvlStrip">
+    <div class="lvl-top"><span class="lvl-n" id="lvlN">Level 1</span><span class="lvl-ja" id="lvlName">入門 · Getting started</span></div>
+    <div class="lvl-bar"><i id="lvlFill" style="width:2%"></i></div>
+    <div class="lvl-foot"><span id="lvlScore">0 / 1000</span><span id="lvlNext">40 to Level 2</span></div>
+    <div class="skills" id="skillStrip"></div>
+    <div class="skill-weak" id="skillWeak" hidden></div>
+  </div>
+
+  <div class="tiles">
+    <div class="tile t-new" id="tileNew"><div class="n">0</div><div class="l">New</div></div>
+    <div class="tile t-lrn" id="tileLrn"><div class="n">0</div><div class="l">Learning</div></div>
+    <div class="tile t-due" id="tileDue"><div class="n">0</div><div class="l">Due</div></div>
+  </div>
+
+  <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+    <button class="btn" id="startBtn" data-mode="today">Start review</button>
+    <button class="btn btn-ghost" id="aheadBtn">Study ahead instead</button>
+  </div>
+  <div class="note" id="startNote" style="margin-top:9px;text-align:center"></div>
+  <div class="warn" id="listenWarn" hidden></div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Deck progress</h2><div class="aux" id="progAux">0 / 1000</div></div>
+    <div class="rail" id="rail"><i class="r-mat" style="width:0"></i><i class="r-yng" style="width:0"></i><i class="r-lrn" style="width:0"></i></div>
+    <div class="legend">
+      <span><i style="background:var(--matcha)"></i>Mature <b id="lgMat">0</b></span>
+      <span><i style="background:var(--ai)"></i>Young <b id="lgYng">0</b></span>
+      <span><i style="background:var(--ohdo)"></i>Learning <b id="lgLrn">0</b></span>
+      <span><i style="background:var(--rule-2)"></i>Untouched <b id="lgNew">0</b></span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Practice</h2><div class="aux" id="pracNote"></div></div>
+    <p class="note" id="tripNote" hidden></p>
+    <div class="pracrow">
+      <button class="pracbtn focus" id="focusBtn">
+        <span class="pn">Practice</span>
+        <span class="pd" id="focusBtnSub">nothing is going badly enough yet</span>
+      </button>
+      <button class="pracbtn car" id="carBtn">
+        <span class="pn">Car</span>
+        <span class="pd" id="carBtnSub">hands free, audio only</span>
+      </button>
+    </div>
+    <div class="opt" style="border-bottom:none;padding-bottom:2px">
+      <div><div class="t">No new words today</div><div class="d">Keeps the scheduled reviews, holds back everything new until tomorrow.</div></div>
+      <button class="sw" id="noNewSw" role="switch" aria-checked="false" aria-label="No new words today"></button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Today</h2></div>
+    <div class="kv"><span>Cards answered</span><b id="kvAns">0</b></div>
+    <div class="kv"><span>Correct on first try</span><b id="kvAcc">&mdash;</b></div>
+    <div class="kv"><span>New words introduced</span><b id="kvNewToday">0</b></div>
+    <div class="kv"><span>Last backup</span><b id="kvBackup">never</b></div>
+  </div>
+</section>
+
+<!-- ============ REVIEW ============ -->
+<section class="screen" id="s-review">
+  <div class="review-wrap">
+    <div class="rev-bar">
+      <button class="x" id="quitBtn" aria-label="End session">&times;</button>
+      <button class="x undo" id="undoBtn" aria-label="Undo last answer" hidden><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h11a5 5 0 0 1 0 10H8"/><path d="m8 4-4 4 4 4"/></svg></button>
+      <div class="pips" id="pips"></div>
+      <div class="cnt" id="revCount">0/0</div>
+    </div>
+
+    <div class="card">
+      <div class="card-tag">
+        <span class="chip dir-j" id="dirChip">JP &rarr; EN</span>
+        <span class="chip pos" id="posChip">名詞</span>
+      </div>
+      <div class="pracbar" id="pracBanner" hidden><span class="dot"></span><span id="pracLabel"></span></div>
+      <div class="face" id="faceFront"></div>
+      <div class="fold" id="fold" hidden><div class="answer" id="faceBack"></div></div>
+    </div>
+
+    <div class="grades" id="grades">
+      <button class="btn showbtn" id="showBtn">Show answer</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CAR ============ -->
+<section class="screen" id="s-car">
+  <div class="carwrap">
+    <div class="carbar">
+      <span id="carClock">7:00</span>
+      <span id="carPhase">Car mode</span>
+      <span id="carCount">0 plays</span>
+    </div>
+
+    <div class="carcheck" id="carCheck" hidden>
+      <h2>Sound check</h2>
+      <p>Car mode plays everything out loud and asks nothing of your hands or your
+         eyes. Connect the phone to the car first, then play the test.</p>
+      <button class="btn carbig" id="carTest">Play the test</button>
+      <div class="carchk-acts">
+        <button class="btn btn-ghost" id="carNoSound">No sound</button>
+        <button class="btn" id="carHeard">I heard it, start</button>
+      </div>
+      <p class="fine" id="carTrouble" hidden>Check the phone is paired and the car is on
+         the Bluetooth source, then raise the volume while the test is actually playing,
+         not before. iPhone stops all speech the moment this app leaves the screen, so
+         keep it open and mounted: car mode holds the screen awake on its own.</p>
+      <p class="fine">Set it up before you drive, not while you are moving. Once it is running it
+         needs neither your hands nor your eyes, and nothing in car mode touches your schedule:
+         it is exposure, not a test.</p>
+      <p class="fine">How it runs: one side of a word plays, then silence. Say the other
+         side out loud in that gap. The answer follows, so you hear straight away whether
+         you had it. Nothing to press, nothing to read.</p>
+    </div>
+
+    
+
+    <div class="carmain" id="carMain" hidden>
+      <button class="car-zone up" id="carZoneRepeat" aria-label="Repeat this word"><span>repeat</span></button>
+      <div class="carnow">
+        <div class="car-rm" id="carRomaji">&mdash;</div>
+        <div class="car-en" id="carEn"></div>
+        <div class="car-kana" id="carKana"></div>
+        <div class="car-rep" id="carRep"></div>
+      </div>
+      <button class="car-zone dn" id="carZoneSkip" aria-label="Skip this word"><span>skip</span></button>
+    </div>
+
+    <div class="cardone" id="carDone" hidden>
+      <h2 id="carDoneHead">Drive over</h2>
+      <p id="carDoneSub"></p>
+      <div class="cd-list" id="carDoneList" hidden></div>
+      <div class="cd-acts">
+        <button class="btn btn-ghost" id="carDoneBtn">Done</button>
+        <button class="btn" id="carToFocus" hidden>Focus on these now</button>
+      </div>
+    </div>
+
+    <p class="carsafe" id="carSafe">Set up before you drive. Eyes on the road.</p>
+    <div class="caracts" id="carActs" hidden>
+      <button class="btn btn-ghost" id="carPause">Pause</button>
+      <button class="btn btn-ghost danger" id="carEnd">End</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRIP CHECK ============ -->
+<section class="screen" id="s-check">
+  <div class="mast"><h1>Trip check</h1><div class="sub" id="checkCount"></div></div>
+  <div class="checkbody" id="checkBody"></div>
+  <div class="caracts"><button class="btn btn-ghost" id="checkQuit">Stop</button></div>
+</section>
+
+<!-- ============ BROWSE ============ -->
+<section class="screen" id="s-browse">
+  <div class="mast"><h1>Browse</h1><div class="sub" id="browseCount">1000 words</div></div>
+  <div class="searchrow">
+    <input id="q" type="search" placeholder="Search kana, romaji or English" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <select id="filt">
+      <option value="all">All</option>
+      <option value="new">Untouched</option>
+      <option value="lrn">Learning</option>
+      <option value="yng">Young</option>
+      <option value="mat">Mature</option>
+      <option value="hard">Leeches</option>
+      <option value="susp">Set aside</option>
+      <option value="sent">Sentences</option>
+      <option value="s1">Stage 1 (first 1000)</option>
+      <option value="s2">Stage 2 (next 759)</option>
+    </select>
+  </div>
+  <div class="rows" id="rows"></div>
+  <div class="note" id="browseNote" style="margin-top:12px"></div>
+</section>
+
+<!-- ============ STATS ============ -->
+<section class="screen" id="s-stats">
+  <div class="mast"><h1>Progress</h1><div class="sub" id="statsSub"></div></div>
+
+  <div class="sec" style="margin-top:4px">
+    <div class="sec-h"><h2>Level</h2><div class="aux" id="lvlAux"></div></div>
+    <div class="panel">
+      <div class="panel-head">
+        <div class="big" id="pLvlBig">1</div>
+        <div>
+          <div class="ja" id="pLvlJa">入門 · Getting started</div>
+          <div class="tiny" id="pLvlOf">of 20</div>
+        </div>
+      </div>
+      <p class="desc" id="pLvlDesc"></p>
+      <div class="split">
+        <div><b id="pLvlScore">0</b><span>Score</span></div>
+        <div><b id="pLvlNext">—</b><span>To next level</span></div>
+        <div><b id="pRecog">0%</b><span>Recognition</span></div>
+        <div><b id="pRecall">0%</b><span>Recall</span></div>
+        <div><b id="pListen">0%</b><span>Listening</span></div>
+        <div><b id="pSent">0 / 593</b><span>Sentences read</span></div>
+        <div><b id="pConj">0 / 38</b><span>Conjugation rules</span></div>
+      </div>
+      <div class="skills wide" id="skillStrip2"></div>
+      <p class="fine" id="scoreNote"></p>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Proficiency by area</h2><div class="aux">1,759 words, 15 areas</div></div>
+    <div class="heat" id="heat"></div>
+    <div class="heatkey"><span>new</span><i class="ramp"></i><span>mastered</span></div>
+    <p class="fine" id="heatNote" style="margin-top:9px"></p>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Streak</h2><div class="aux" id="streakAux"></div></div>
+    <div class="chart"><svg id="streakChart" viewBox="0 0 320 62" role="img" aria-label="Reviews over the last 30 days"></svg></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Trip check</h2></div>
+    <p class="note" id="checkNote"></p>
+    <button class="btn" id="checkBtn" style="width:100%;margin-top:10px">Take the trip check</button>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Numbers</h2></div>
+    <div class="kv"><span>Cards in rotation</span><b id="nRot">0</b></div>
+    <div class="kv"><span id="nEfLabel">Average difficulty</span><b id="nEf">&mdash;</b></div>
+    <div class="kv"><span>Average interval</span><b id="nIv">&mdash;</b></div>
+    <div class="kv"><span>Lifetime answers</span><b id="nAns">0</b></div>
+    <div class="kv"><span>Practice answers</span><b id="nPrac">0</b></div>
+    <div class="kv"><span>Car minutes</span><b id="nCarMin">0</b></div>
+    <div class="kv"><span>Car plays</span><b id="nCarHeard">0</b></div>
+    <div class="kv"><span>Answers logged</span><b id="nLog">0</b></div>
+    <div class="kv"><span>True retention, 30 days</span><b id="nRet">&mdash;</b></div>
+    <div class="kv"><span>Typed answers correct, 30 days</span><b id="nTyped">&mdash;</b></div>
+    <div class="kv"><span>All answers, learning steps included</span><b id="nAcc">&mdash;</b></div>
+    <div class="kv"><span>Longest interval</span><b id="nMax">&mdash;</b></div>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section class="screen" id="s-set">
+  <div class="mast"><h1>Settings</h1><div class="sub">SM-2</div></div>
+
+  <div class="sec" style="margin-top:0">
+    <div class="sec-h"><h2>Scheduler</h2></div>
+    <div class="opt">
+      <div><div class="t">Algorithm</div><div class="d">FSRS models memory directly. SM-2 is the classic ease-factor method.</div></div>
+      <select id="setSched">
+        <option value="fsrs">FSRS-6</option>
+        <option value="sm2">SM-2</option>
+      </select>
+    </div>
+    <div class="opt" id="retRow">
+      <div><div class="t">Target retention</div><div class="d">The chance of recall you want at the moment a card comes back. Lower means longer gaps and fewer reviews.</div></div>
+      <input type="number" id="setRet" min="80" max="97" step="1">
+    </div>
+    <p class="note" id="schedNote" style="margin-top:11px"></p>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Daily load</h2></div>
+    <div class="opt">
+      <div><div class="t">New words per day</div><div class="d">The floor for how many unseen words enter each day, not the ceiling. The deck holds <span id="deckCountTxt">1,759</span> words.</div></div>
+      <input type="number" id="setNew" min="0" max="80" step="1">
+    </div>
+    <div class="opt">
+      <div><div class="t">Review cap per day</div><div class="d">Upper limit on scheduled reviews, so a backlog never buries you.</div></div>
+      <input type="number" id="setRev" min="10" max="600" step="10">
+    </div>
+    <div class="opt">
+      <div><div class="t">Follow-up cards per day</div><div class="d">Recall and listening cards for words you already know. Their own budget, so a new word no longer starves the word before it.</div></div>
+      <input type="number" id="setCons" min="0" max="40" step="1" placeholder="auto">
+    </div>
+    <div class="opt">
+      <div><div class="t">Let easy days earn more</div><div class="d">Each new word you grade Easy on sight buys another one, up to double the daily figure. A miss gives some back.</div></div>
+      <button class="sw" id="setSoft" role="switch" aria-checked="true" aria-label="Let easy days earn more"></button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Card direction</h2></div>
+    <div class="opt">
+      <div><div class="t">Reverse cards (EN &rarr; JP)</div><div class="d">Recall in Japanese. Harder than recognition, so it starts later by default.</div></div>
+      <select id="setRev2">
+        <option value="grad">After the word graduates</option>
+        <option value="now">From the start</option>
+        <option value="off">Off</option>
+      </select>
+    </div>
+    <div class="opt">
+      <div><div class="t">Keep the two directions apart</div><div class="d">A word is never tested both ways on the same day, so its answer is never fresh from the card before.</div></div>
+      <button class="sw" id="setSep" role="switch" aria-checked="true" aria-label="Keep the two directions apart"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Listening cards</div><div class="d">A third card that plays the word and asks what you heard. <span id="voiceCount">0</span> Japanese voice(s) found on this device.</div></div>
+      <button class="sw" id="setListen" role="switch" aria-checked="true" aria-label="Listening cards"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Speech speed</div><div class="d">Percent of normal. 85 is a clear teaching pace; real Japanese runs at 100 and above.</div></div>
+      <input type="number" id="setRate" min="50" max="120" step="5">
+    </div>
+    <div class="opt">
+      <div><div class="t">Play as the card appears</div><div class="d">Reads the Japanese aloud the moment a card is shown, not only when you tap the speaker. Silent on English to Japanese cards, and a conjugation card plays the dictionary form, never the answer.</div></div>
+      <button class="sw" id="setAuto" role="switch" aria-checked="true" aria-label="Play as the card appears"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Vary the speed and voice</div><div class="d">Jitters each playback around your setting and rotates between the device voices. Without it you learn one recording rather than the word.</div></div>
+      <button class="sw" id="setVary" role="switch" aria-checked="true" aria-label="Vary the speed and voice"></button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>The trip</h2></div>
+    <div class="opt">
+      <div><div class="t">Trip date</div><div class="d">The day you land. The study screen counts down to it, and new words pause for the last ten days so what you have can settle instead of growing.</div></div>
+      <input type="date" id="setTrip">
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Car mode</h2></div>
+    <div class="opt">
+      <div><div class="t">Direction</div><div class="d">Mixed hears the word first, then asks you to produce it from English on the passes after. <span id="enVoiceCount">0</span> English voice(s) found on this device.</div></div>
+      <select id="setCarDir">
+        <option value="mix">Mixed</option>
+        <option value="je">Japanese to English</option>
+        <option value="ej">English to Japanese</option>
+      </select>
+    </div>
+    <div class="opt">
+      <div><div class="t">Downloaded voice</div><div class="d">iPhone never sends its own speech to CarPlay, so car mode plays pre-recorded audio instead, which does reach it. Japanese and English both, in a neural voice, and it works with no signal once downloaded. <span id="audNote"></span></div></div>
+      <button class="sw" id="setCarAudio" role="switch" aria-checked="true" aria-label="Downloaded voice"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Download for the words in rotation</div><div class="d">Fetches only the audio a drive can reach, not the whole deck. Do it on wifi.</div></div>
+      <button class="btn btn-ghost" id="audGet">Download</button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Check it through the car</div><div class="d">Plays a line from the downloaded voice. If you hear this on CarPlay, car mode will work.</div></div>
+      <button class="btn btn-ghost" id="audTest">Play</button>
+    </div>
+    <div class="opt">
+      <div><div class="t">English voice</div><div class="d">Only used as the fallback, when the downloaded voice is off or missing. Safari offers a subset of the voices iOS has, and on many devices the English half of it is robotic. Pick whichever sounds human. Now using <b id="enVoiceNow">&mdash;</b>.</div></div>
+      <select id="setEnVoice"><option value="auto">Best available</option></select>
+    </div>
+    <div class="opt">
+      <div><div class="t">Hear it</div><div class="d">Plays a sample line in the chosen English voice.</div></div>
+      <button class="btn btn-ghost" id="enVoiceTest">Test</button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Session length</div><div class="d">A drive is as long as the drive. Until I stop runs until you end it, which is what a commute needs; a fixed length is there if you want one. The phone must stay awake and on screen either way.</div></div>
+      <select id="setCarMin">
+        <option value="0">Until I stop</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="20">20</option>
+      </select>
+    </div>
+    <div class="opt">
+      <div><div class="t">Thinking gap</div><div class="d">Seconds of silence between the prompt and the answer. This gap is where the recall actually happens.</div></div>
+      <input type="number" id="setCarGap" min="2" max="8" step="1">
+    </div>
+    <div class="opt">
+      <div><div class="t">Leave room to say it</div><div class="d">A short silence after the answer so you can repeat it out loud.</div></div>
+      <button class="sw" id="setCarEcho" role="switch" aria-checked="true" aria-label="Leave room to say it"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Slow repeat</div><div class="d">Plays the Japanese a second time, clearly slower, on English to Japanese passes.</div></div>
+      <button class="sw" id="setCarSlow" role="switch" aria-checked="true" aria-label="Slow repeat"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Sentences</div><div class="d">On a word's last pass, plays one sentence you have already unlocked that uses it.</div></div>
+      <button class="sw" id="setCarSent" role="switch" aria-checked="true" aria-label="Sentences in car mode"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Conjugation</div><div class="d">On a word's second pass, asks for one form aloud. Only for words that have held an interval of three days.</div></div>
+      <button class="sw" id="setCarConj" role="switch" aria-checked="true" aria-label="Conjugation in car mode"></button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Cards</h2></div>
+    <div class="opt">
+      <div><div class="t">Type the romaji</div><div class="d">On reverse cards, type your answer before grading it.</div></div>
+      <button class="sw" id="setType" role="switch" aria-checked="false" aria-label="Type the romaji"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Show kanji</div><div class="d">Displayed under the kana for reference only. Never tested.</div></div>
+      <button class="sw" id="setKanji" role="switch" aria-checked="true" aria-label="Show kanji"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Read aloud</div><div class="d">Uses the Japanese voice on your device, when one is installed.</div></div>
+      <button class="sw" id="setTts" role="switch" aria-checked="true" aria-label="Read aloud"></button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Sentences</h2></div>
+    <div class="opt">
+      <div><div class="t">Example sentences</div><div class="d"><span id="sentCountTxt">1,442</span> short sentences in kana. A sentence opens once its words are known, and the setting below decides whether one of them may still be new.</div></div>
+      <button class="sw" id="setSent" role="switch" aria-checked="true" aria-label="Example sentences"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">New sentences per day</div><div class="d">Kept separate from the word budget so sentences never crowd out vocabulary.</div></div>
+      <input type="number" id="setSentN" min="0" max="20" step="1">
+    </div>
+    <div class="opt">
+      <div><div class="t">Allow one new word per sentence</div><div class="d">A sentence opens when all but one of its words is known, and the missing one is shown with its reading and meaning. Off means every word must be known first.</div></div>
+      <button class="sw" id="setGap" role="switch" aria-checked="true"><span></span></button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Conjugation</h2></div>
+    <div class="opt">
+      <div><div class="t">Conjugation cards</div><div class="d"><span id="conjCountTxt">40</span> scheduled cards, one per rule: -masu, -mashita, -masen, the te-form and the tai form for wanting to do something, plus i- and na-adjectives. Each opens once the word it is built on has held a three day interval, so a form is never drilled while its base word is still shaky. Every other verb and adjective is drilled in Practice, which costs no review time.</div></div>
+      <button class="sw" id="setConj" role="switch" aria-checked="true" aria-label="Conjugation cards"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">New conjugation cards per day</div><div class="d">Own budget, like sentences. Two a day clears all of them in three weeks.</div></div>
+      <input type="number" id="setConjN" min="0" max="10" step="1">
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Appearance</h2></div>
+    <div class="opt">
+      <div><div class="t">Count on the app icon</div><div class="d">Shows how many cards are waiting without opening the app. iOS asks for permission once.</div></div>
+      <button class="sw" id="setBadge" role="switch" aria-checked="true" aria-label="Count on the app icon"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Theme</div><div class="d">Follows your phone unless you pin it.</div></div>
+      <select id="setTheme"><option value="auto">Match phone</option><option value="light">Light</option><option value="dark">Dark</option></select>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>Data</h2></div>
+    <div class="kv"><span>Running as</span><b id="stMode">—</b></div>
+    <div class="kv"><span>Storage mode</span><b id="stPersist">—</b></div>
+    <div class="kv"><span>Data stored</span><b id="stUsage">—</b></div>
+    <div class="kv"><span>Last backup</span><b id="stBackup">never</b></div>
+    <p class="note" id="stNote" style="margin-top:11px"></p>
+    <p class="note" id="syncNote" style="margin-top:11px"></p>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-ghost" id="exportBtn">Download backup</button>
+      <button class="btn btn-ghost" id="importBtn">Restore backup</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <div style="margin-top:8px"><button class="btn btn-ghost danger" id="resetBtn">Reset all</button></div>
+    <p class="note" style="margin-top:16px">
+      Scheduling defaults to FSRS&#8209;6. Each card carries a difficulty and a stability, and the next review is placed
+      on the day your chance of recalling it falls to your target retention. Lapsed cards drop back into short steps
+      before rejoining the long schedule. SM&#8209;2, the classic ease&#8209;factor method, remains selectable above.
+    </p>
+    <p class="note" style="margin-top:10px">Every scheduled answer is written to a review log held on this phone: the card, the grade, and how long it had been since you last saw it. Nothing else can reconstruct that later, and it is what fitting the scheduler to your own memory would need. The log travels inside your backups.</p>
+    <p class="note" style="margin-top:10px">The daily figures govern the scheduled queue only. Study ahead sessions are unlimited and can be run as often as you like; they pull future reviews forward and keep introducing new words.</p>
+    <p class="note" style="margin-top:10px">Installed as a Home Screen app, this deck runs with no network at all. The 1,000 words, the schedule and the interface are already on the phone.</p>
+    <p class="note" style="margin-top:10px">iOS gives a Home Screen app its own storage, separate from Safari's. Study from the Home Screen icon and stay there: cards answered in a Safari tab are recorded against a different, unrelated schedule.</p>
+  </div>
+</section>
+
+<nav class="tabs" id="tabs"><div class="inner">
+  <button class="tab on" data-go="home"><svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H5.5A1.5 1.5 0 0 1 4 15.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h4.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>Study</button>
+  <button class="tab" data-go="browse"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>Browse</button>
+  <button class="tab" data-go="stats"><svg viewBox="0 0 24 24"><path d="M4 20V10m5 10V5m5 15v-7m5 7V8"/></svg>Progress</button>
+  <button class="tab" data-go="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18"/></svg>Settings</button>
+</div></nav>
+
+<div class="sheet" id="sheet" hidden></div>
+<div class="toast" id="toast"></div>
+</div>
