@@ -1,0 +1,18 @@
+{
+  "name": "Kana Ladder",
+  "short_name": "Kana Ladder",
+  "description": "A 1,000-word Japanese vocabulary trainer on the SM-2 spaced repetition schedule.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6F2EA",
+  "theme_color": "#F6F2EA",
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {"src":"icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ]
+}
