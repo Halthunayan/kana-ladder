@@ -1,0 +1,922 @@
+[
+ {
+  "id": "g001",
+  "kana": "のみます",
+  "romaji": "nomimasu",
+  "en": "drink, polite present",
+  "base": "のむ",
+  "baseRomaji": "nomu",
+  "baseEn": "to drink",
+  "form": "masu",
+  "formEn": "polite present",
+  "use": "what you will hear at a counter or station",
+  "cls": "godan",
+  "rule": "godan: the final -u sound becomes -i, then add masu",
+  "w": [
+   "c0115"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "masu"
+  ]
+ },
+ {
+  "id": "g002",
+  "kana": "かいます",
+  "romaji": "kaimasu",
+  "en": "buy, polite present",
+  "base": "かう",
+  "baseRomaji": "kau",
+  "baseEn": "to buy",
+  "form": "masu",
+  "formEn": "polite present",
+  "use": "what you will hear at a counter or station",
+  "cls": "godan",
+  "rule": "godan: the final -u sound becomes -i, then add masu",
+  "w": [
+   "c0116"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "masu"
+  ]
+ },
+ {
+  "id": "g003",
+  "kana": "はなします",
+  "romaji": "hanashimasu",
+  "en": "speak, polite present",
+  "base": "はなす",
+  "baseRomaji": "hanasu",
+  "baseEn": "to speak / talk",
+  "form": "masu",
+  "formEn": "polite present",
+  "use": "what you will hear at a counter or station",
+  "cls": "godan",
+  "rule": "godan: the final -u sound becomes -i, then add masu",
+  "w": [
+   "c0184"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "masu"
+  ]
+ },
+ {
+  "id": "g004",
+  "kana": "かえります",
+  "romaji": "kaerimasu",
+  "en": "return home, polite present",
+  "base": "かえる",
+  "baseRomaji": "kaeru",
+  "baseEn": "to return home / go back",
+  "form": "masu",
+  "formEn": "polite present",
+  "use": "what you will hear at a counter or station",
+  "cls": "godan",
+  "rule": "godan: the final -u sound becomes -i, then add masu",
+  "w": [
+   "c0181"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "masu"
+  ]
+ },
+ {
+  "id": "g005",
+  "kana": "たべます",
+  "romaji": "tabemasu",
+  "en": "eat, polite present",
+  "base": "たべる",
+  "baseRomaji": "taberu",
+  "baseEn": "to eat",
+  "form": "masu",
+  "formEn": "polite present",
+  "use": "what you will hear at a counter or station",
+  "cls": "ichidan",
+  "rule": "ichidan: drop ru, then add masu",
+  "w": [
+   "c0114"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "ichidan",
+   "masu"
+  ]
+ },
+ {
+  "id": "g006",
+  "kana": "みます",
+  "romaji": "mimasu",
+  "en": "see, polite present",
+  "base": "みる",
+  "baseRomaji": "miru",
+  "baseEn": "to see / watch / look at",
+  "form": "masu",
+  "formEn": "polite present",
+  "use": "what you will hear at a counter or station",
+  "cls": "ichidan",
+  "rule": "ichidan: drop ru, then add masu",
+  "w": [
+   "c0182"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "ichidan",
+   "masu"
+  ]
+ },
+ {
+  "id": "g007",
+  "kana": "します",
+  "romaji": "shimasu",
+  "en": "do, polite present",
+  "base": "する",
+  "baseRomaji": "suru",
+  "baseEn": "to do",
+  "form": "masu",
+  "formEn": "polite present",
+  "use": "what you will hear at a counter or station",
+  "cls": "irregular",
+  "rule": "irregular: learn it as it is",
+  "w": [
+   "c0178"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "irregular",
+   "masu"
+  ]
+ },
+ {
+  "id": "g008",
+  "kana": "きます",
+  "romaji": "kimasu",
+  "en": "come, polite present",
+  "base": "くる",
+  "baseRomaji": "kuru",
+  "baseEn": "to come",
+  "form": "masu",
+  "formEn": "polite present",
+  "use": "what you will hear at a counter or station",
+  "cls": "irregular",
+  "rule": "irregular: learn it as it is",
+  "w": [
+   "c0179"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "irregular",
+   "masu"
+  ]
+ },
+ {
+  "id": "g009",
+  "kana": "のみました",
+  "romaji": "nomimashita",
+  "en": "drink, polite past",
+  "base": "のむ",
+  "baseRomaji": "nomu",
+  "baseEn": "to drink",
+  "form": "mashita",
+  "formEn": "polite past",
+  "use": "reporting something already done",
+  "cls": "godan",
+  "rule": "same stem as masu, ending in mashita",
+  "w": [
+   "c0115"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "mashita"
+  ]
+ },
+ {
+  "id": "g010",
+  "kana": "かきました",
+  "romaji": "kakimashita",
+  "en": "write, polite past",
+  "base": "かく",
+  "baseRomaji": "kaku",
+  "baseEn": "to write",
+  "form": "mashita",
+  "formEn": "polite past",
+  "use": "reporting something already done",
+  "cls": "godan",
+  "rule": "same stem as masu, ending in mashita",
+  "w": [
+   "c0187"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "mashita"
+  ]
+ },
+ {
+  "id": "g011",
+  "kana": "たべました",
+  "romaji": "tabemashita",
+  "en": "eat, polite past",
+  "base": "たべる",
+  "baseRomaji": "taberu",
+  "baseEn": "to eat",
+  "form": "mashita",
+  "formEn": "polite past",
+  "use": "reporting something already done",
+  "cls": "ichidan",
+  "rule": "drop ru, then add mashita",
+  "w": [
+   "c0114"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "ichidan",
+   "mashita"
+  ]
+ },
+ {
+  "id": "g012",
+  "kana": "しました",
+  "romaji": "shimashita",
+  "en": "do, polite past",
+  "base": "する",
+  "baseRomaji": "suru",
+  "baseEn": "to do",
+  "form": "mashita",
+  "formEn": "polite past",
+  "use": "reporting something already done",
+  "cls": "irregular",
+  "rule": "irregular: learn it as it is",
+  "w": [
+   "c0178"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "irregular",
+   "mashita"
+  ]
+ },
+ {
+  "id": "g013",
+  "kana": "きました",
+  "romaji": "kimashita",
+  "en": "come, polite past",
+  "base": "くる",
+  "baseRomaji": "kuru",
+  "baseEn": "to come",
+  "form": "mashita",
+  "formEn": "polite past",
+  "use": "reporting something already done",
+  "cls": "irregular",
+  "rule": "irregular: learn it as it is",
+  "w": [
+   "c0179"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "irregular",
+   "mashita"
+  ]
+ },
+ {
+  "id": "g014",
+  "kana": "よみません",
+  "romaji": "yomimasen",
+  "en": "read, polite negative",
+  "base": "よむ",
+  "baseRomaji": "yomu",
+  "baseEn": "to read",
+  "form": "masen",
+  "formEn": "polite negative",
+  "use": "saying you do not or will not",
+  "cls": "godan",
+  "rule": "same stem as masu, ending in masen",
+  "w": [
+   "c0186"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "masen"
+  ]
+ },
+ {
+  "id": "g015",
+  "kana": "まちません",
+  "romaji": "machimasen",
+  "en": "wait, polite negative",
+  "base": "まつ",
+  "baseRomaji": "matsu",
+  "baseEn": "to wait",
+  "form": "masen",
+  "formEn": "polite negative",
+  "use": "saying you do not or will not",
+  "cls": "godan",
+  "rule": "same stem as masu, ending in masen",
+  "w": [
+   "c0562"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "masen"
+  ]
+ },
+ {
+  "id": "g016",
+  "kana": "みません",
+  "romaji": "mimasen",
+  "en": "see, polite negative",
+  "base": "みる",
+  "baseRomaji": "miru",
+  "baseEn": "to see / watch / look at",
+  "form": "masen",
+  "formEn": "polite negative",
+  "use": "saying you do not or will not",
+  "cls": "ichidan",
+  "rule": "drop ru, then add masen",
+  "w": [
+   "c0182"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "ichidan",
+   "masen"
+  ]
+ },
+ {
+  "id": "g017",
+  "kana": "しません",
+  "romaji": "shimasen",
+  "en": "do, polite negative",
+  "base": "する",
+  "baseRomaji": "suru",
+  "baseEn": "to do",
+  "form": "masen",
+  "formEn": "polite negative",
+  "use": "saying you do not or will not",
+  "cls": "irregular",
+  "rule": "irregular: learn it as it is",
+  "w": [
+   "c0178"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "irregular",
+   "masen"
+  ]
+ },
+ {
+  "id": "g018",
+  "kana": "きません",
+  "romaji": "kimasen",
+  "en": "come, polite negative",
+  "base": "くる",
+  "baseRomaji": "kuru",
+  "baseEn": "to come",
+  "form": "masen",
+  "formEn": "polite negative",
+  "use": "saying you do not or will not",
+  "cls": "irregular",
+  "rule": "irregular: learn it as it is",
+  "w": [
+   "c0179"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "irregular",
+   "masen"
+  ]
+ },
+ {
+  "id": "g019",
+  "kana": "かって",
+  "romaji": "katte",
+  "en": "buy, te-form",
+  "base": "かう",
+  "baseRomaji": "kau",
+  "baseEn": "to buy",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "godan",
+  "rule": "godan te-form: verbs ending u, tsu or ru take tte",
+  "w": [
+   "c0116"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "te"
+  ]
+ },
+ {
+  "id": "g020",
+  "kana": "まって",
+  "romaji": "matte",
+  "en": "wait, te-form",
+  "base": "まつ",
+  "baseRomaji": "matsu",
+  "baseEn": "to wait",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "godan",
+  "rule": "godan te-form: verbs ending u, tsu or ru take tte",
+  "w": [
+   "c0562"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "te"
+  ]
+ },
+ {
+  "id": "g021",
+  "kana": "のんで",
+  "romaji": "nonde",
+  "en": "drink, te-form",
+  "base": "のむ",
+  "baseRomaji": "nomu",
+  "baseEn": "to drink",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "godan",
+  "rule": "godan te-form: verbs ending mu, bu or nu take nde",
+  "w": [
+   "c0115"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "te"
+  ]
+ },
+ {
+  "id": "g022",
+  "kana": "しんで",
+  "romaji": "shinde",
+  "en": "die, te-form",
+  "base": "しぬ",
+  "baseRomaji": "shinu",
+  "baseEn": "to die",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "godan",
+  "rule": "godan te-form: verbs ending mu, bu or nu take nde",
+  "w": [
+   "c0836"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "te"
+  ]
+ },
+ {
+  "id": "g023",
+  "kana": "きいて",
+  "romaji": "kiite",
+  "en": "hear, te-form",
+  "base": "きく",
+  "baseRomaji": "kiku",
+  "baseEn": "to hear / listen / ask",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "godan",
+  "rule": "godan te-form: verbs ending ku take ite",
+  "w": [
+   "c0183"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "te"
+  ]
+ },
+ {
+  "id": "g024",
+  "kana": "いって",
+  "romaji": "itte",
+  "en": "go, te-form",
+  "base": "いく",
+  "baseRomaji": "iku",
+  "baseEn": "to go",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "godan",
+  "rule": "the one exception: iku ends in ku but takes tte, not ite",
+  "w": [
+   "c0180"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "te"
+  ]
+ },
+ {
+  "id": "g025",
+  "kana": "およいで",
+  "romaji": "oyoide",
+  "en": "swim, te-form",
+  "base": "およぐ",
+  "baseRomaji": "oyogu",
+  "baseEn": "to swim",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "godan",
+  "rule": "godan te-form: verbs ending gu take ide",
+  "w": [
+   "c0828"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "te"
+  ]
+ },
+ {
+  "id": "g026",
+  "kana": "はなして",
+  "romaji": "hanashite",
+  "en": "speak, te-form",
+  "base": "はなす",
+  "baseRomaji": "hanasu",
+  "baseEn": "to speak / talk",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "godan",
+  "rule": "godan te-form: verbs ending su take shite",
+  "w": [
+   "c0184"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "te"
+  ]
+ },
+ {
+  "id": "g027",
+  "kana": "たべて",
+  "romaji": "tabete",
+  "en": "eat, te-form",
+  "base": "たべる",
+  "baseRomaji": "taberu",
+  "baseEn": "to eat",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "ichidan",
+  "rule": "ichidan te-form: drop ru, add te",
+  "w": [
+   "c0114"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "ichidan",
+   "te"
+  ]
+ },
+ {
+  "id": "g028",
+  "kana": "みて",
+  "romaji": "mite",
+  "en": "see, te-form",
+  "base": "みる",
+  "baseRomaji": "miru",
+  "baseEn": "to see / watch / look at",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "ichidan",
+  "rule": "ichidan te-form: drop ru, add te",
+  "w": [
+   "c0182"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "ichidan",
+   "te"
+  ]
+ },
+ {
+  "id": "g029",
+  "kana": "して",
+  "romaji": "shite",
+  "en": "do, te-form",
+  "base": "する",
+  "baseRomaji": "suru",
+  "baseEn": "to do",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "irregular",
+  "rule": "irregular: learn it as it is",
+  "w": [
+   "c0178"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "irregular",
+   "te"
+  ]
+ },
+ {
+  "id": "g030",
+  "kana": "きて",
+  "romaji": "kite",
+  "en": "come, te-form",
+  "base": "くる",
+  "baseRomaji": "kuru",
+  "baseEn": "to come",
+  "form": "te",
+  "formEn": "te-form",
+  "use": "joins clauses, and makes requests with kudasai",
+  "cls": "irregular",
+  "rule": "irregular: learn it as it is",
+  "w": [
+   "c0179"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "irregular",
+   "te"
+  ]
+ },
+ {
+  "id": "g031",
+  "kana": "たかかった",
+  "romaji": "takakatta",
+  "en": "expensive, past",
+  "base": "たかい",
+  "baseRomaji": "takai",
+  "baseEn": "expensive; tall, high",
+  "form": "past",
+  "formEn": "past",
+  "use": "describing how something was, or was not",
+  "cls": "adj-i",
+  "rule": "i-adjective: drop the final i, add katta",
+  "w": [
+   "c0145"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "adj-i",
+   "past"
+  ]
+ },
+ {
+  "id": "g032",
+  "kana": "たかくない",
+  "romaji": "takakunai",
+  "en": "expensive, negative",
+  "base": "たかい",
+  "baseRomaji": "takai",
+  "baseEn": "expensive; tall, high",
+  "form": "neg",
+  "formEn": "negative",
+  "use": "describing how something was, or was not",
+  "cls": "adj-i",
+  "rule": "i-adjective: drop the final i, add kunai",
+  "w": [
+   "c0145"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "adj-i",
+   "neg"
+  ]
+ },
+ {
+  "id": "g033",
+  "kana": "おいしくない",
+  "romaji": "oishikunai",
+  "en": "delicious, negative",
+  "base": "おいしい",
+  "baseRomaji": "oishii",
+  "baseEn": "delicious / tasty",
+  "form": "neg",
+  "formEn": "negative",
+  "use": "describing how something was, or was not",
+  "cls": "adj-i",
+  "rule": "i-adjective: drop the final i, add kunai",
+  "w": [
+   "c0113"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "adj-i",
+   "neg"
+  ]
+ },
+ {
+  "id": "g034",
+  "kana": "よかった",
+  "romaji": "yokatta",
+  "en": "good, past",
+  "base": "いい",
+  "baseRomaji": "ii",
+  "baseEn": "good",
+  "form": "past",
+  "formEn": "past",
+  "use": "describing how something was, or was not",
+  "cls": "adj-i",
+  "rule": "ii is irregular: every form is built on yo-",
+  "w": [
+   "c0193"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "adj-i",
+   "past"
+  ]
+ },
+ {
+  "id": "g035",
+  "kana": "よくない",
+  "romaji": "yokunai",
+  "en": "good, negative",
+  "base": "いい",
+  "baseRomaji": "ii",
+  "baseEn": "good",
+  "form": "neg",
+  "formEn": "negative",
+  "use": "describing how something was, or was not",
+  "cls": "adj-i",
+  "rule": "ii is irregular: every form is built on yo-",
+  "w": [
+   "c0193"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "adj-i",
+   "neg"
+  ]
+ },
+ {
+  "id": "g036",
+  "kana": "しずかでした",
+  "romaji": "shizuka deshita",
+  "en": "quiet, past",
+  "base": "しずか",
+  "baseRomaji": "shizuka",
+  "baseEn": "quiet",
+  "form": "past",
+  "formEn": "past",
+  "use": "describing how something was, or was not",
+  "cls": "adj-na",
+  "rule": "na-adjective: add deshita",
+  "w": [
+   "c0206"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "adj-na",
+   "past"
+  ]
+ },
+ {
+  "id": "g037",
+  "kana": "しずかじゃない",
+  "romaji": "shizuka janai",
+  "en": "quiet, negative",
+  "base": "しずか",
+  "baseRomaji": "shizuka",
+  "baseEn": "quiet",
+  "form": "neg",
+  "formEn": "negative",
+  "use": "describing how something was, or was not",
+  "cls": "adj-na",
+  "rule": "na-adjective: add janai",
+  "w": [
+   "c0206"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "adj-na",
+   "neg"
+  ]
+ },
+ {
+  "id": "g038",
+  "kana": "べんりでした",
+  "romaji": "benri deshita",
+  "en": "convenient, past",
+  "base": "べんり",
+  "baseRomaji": "benri",
+  "baseEn": "convenient",
+  "form": "past",
+  "formEn": "past",
+  "use": "describing how something was, or was not",
+  "cls": "adj-na",
+  "rule": "na-adjective: add deshita",
+  "w": [
+   "c0208"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "adj-na",
+   "past"
+  ]
+ },
+ {
+  "id": "g039",
+  "kana": "いきたいです",
+  "romaji": "ikitai desu",
+  "en": "want to go",
+  "base": "いく",
+  "baseRomaji": "iku",
+  "baseEn": "to go",
+  "form": "tai",
+  "formEn": "want to do it form",
+  "use": "the single most useful thing to be able to say to a taxi driver or at a counter",
+  "cls": "godan",
+  "rule": "godan: the final -u sound becomes -i, then add tai desu",
+  "w": [
+   "c0180"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "godan",
+   "tai"
+  ]
+ },
+ {
+  "id": "g040",
+  "kana": "たべたいです",
+  "romaji": "tabetai desu",
+  "en": "want to eat",
+  "base": "たべる",
+  "baseRomaji": "taberu",
+  "baseEn": "to eat",
+  "form": "tai",
+  "formEn": "want to do it form",
+  "use": "ordering by saying what you would like rather than naming a dish",
+  "cls": "ichidan",
+  "rule": "ichidan: drop -ru, then add tai desu",
+  "w": [
+   "c0114"
+  ],
+  "pos": "conjugation",
+  "tags": [
+   "conjugation",
+   "ichidan",
+   "tai"
+  ]
+ }
+]
