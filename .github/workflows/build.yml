@@ -1,0 +1,144 @@
+name: build, test and deploy
+
+# Fires on a change to anything the build actually reads. Editing a source file
+# in the GitHub web editor, from a phone or anywhere else, is now the whole
+# deploy procedure: this workflow rebuilds, runs the gates, and publishes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'sw.js'
+      - 'manifest.webmanifest'
+      - 'icons/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # build.py resolves the project root from its own location, so the source
+      # tree works unchanged under src/. It reads pwa/audio/v1/manifest.json to
+      # decide whether recorded audio shipped; the sprites live at the repo root
+      # on the published site, so hand it the manifest from there.
+      - name: build
+        run: |
+          set -eu
+          mkdir -p src/pwa/audio/v1 src/app
+          cp audio/v1/manifest.json src/pwa/audio/v1/manifest.json
+          python3 src/build/build.py
+
+      - name: guard against a build that lost the audio or the deck
+        run: |
+          set -eu
+          grep -q '__AUDIO_SHIPPED__' src/pwa/index.html && \
+            { echo "the audio flag was never substituted"; exit 1; } || true
+          grep -q 'id="deck-data"' src/pwa/index.html
+          grep -q 'id="sent-data"' src/pwa/index.html
+          test "$(stat -c%s src/pwa/index.html)" -gt 1000000
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: built
+          path: |
+            src/pwa/index.html
+            src/app/index.html
+          retention-days: 7
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: built
+          path: .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: install a browser
+        run: |
+          set -eu
+          npm init -y >/dev/null
+          npm i playwright@1.49.1 >/dev/null
+          npx playwright install --with-deps chromium
+
+      # Two things here are deliberate. The suites reach the app over
+      # http://localhost, which is the only place the read-only test handle is
+      # attached, so a file:// path or any other host would silently skip every
+      # assertion. And what is served is the PWA build, the exact document the
+      # phone loads, not the artifact variant the suites used to point at.
+      - name: serve the build on localhost
+        run: |
+          set -eu
+          mkdir -p site
+          cp src/pwa/index.html site/index.html
+          ln -s "$PWD/audio" site/audio
+          ln -s "$PWD/icons" site/icons
+          (cd site && python3 -m http.server 8100 >/dev/null 2>&1 &)
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://localhost:8100/index.html && break || sleep 1
+          done
+          curl -sf -o /dev/null http://localhost:8100/index.html
+
+      - name: car mode
+        run: node src/tests/car.js
+
+      - name: listening recovers and never fails silently
+        run: node src/tests/tts_recovery.js
+
+  deploy:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: built
+          path: .
+
+      # The service worker cache name is derived from the built page rather than
+      # typed by hand. Forgetting to bump it made a deploy invisible until the
+      # second launch, and that mistake is now impossible: a page that changed
+      # gets a new cache, a page that did not keeps the old one.
+      - name: assemble the site
+        run: |
+          set -eu
+          mkdir -p _site
+          cp -r audio icons _site/
+          cp manifest.webmanifest robots.txt _site/
+          cp src/pwa/index.html _site/index.html
+          H="$(sha1sum _site/index.html | cut -c1-8)"
+          sed "s|^var CACHE = \".*\";|var CACHE = \"kana-ladder-$H\";|" sw.js > _site/sw.js
+          grep -q "kana-ladder-$H" _site/sw.js
+          test -f _site/audio/v1/manifest.json
+          test -f _site/icons/icon-512.png
+          echo "cache name: kana-ladder-$H"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
