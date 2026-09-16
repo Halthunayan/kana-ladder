@@ -1460,22 +1460,51 @@ function jaScore(v){
   if(v.default) sc+=1;
   return sc;
 }
-/* What to show next to a name when two voices share it. The identifier usually
-   says which is which; when it does not, its tail is still unique and is shown
-   rather than a guess, so the list can be told apart by eye and by ear. */
+/* Two voices called Kyoko, and both identifiers contain the word "compact",
+   so naming the quality told them apart not at all: the picker showed
+   "Kyoko - compact" twice. A label is only useful if it is unique, so the
+   quality word is tried first, and where that still collides the labels fall
+   back to the part of the identifier that actually differs between them, and
+   failing even that to a number. Nothing here assumes what Apple puts in an
+   identifier; it shows whatever is there and distinct. */
 function jaQuality(v){
   var t=vText(v).toLowerCase();
   if(/premium/.test(t)) return "premium";
   if(/enhanced/.test(t)) return "enhanced";
   if(/neural/.test(t)) return "neural";
   if(/compact/.test(t)) return "compact";
-  var id=vId(v), cut=id.lastIndexOf(".");
-  return cut>0 ? id.slice(cut+1) : id.slice(-12);
+  return "";
+}
+/* Guessing at what distinguishes two identifiers produced worse labels than
+   not guessing: both of his say "compact", and trimming the common prefix left
+   one of them with nothing to show. So a shared name is distinguished by the
+   quality word only when the quality words actually differ, and otherwise by a
+   plain number, which is always unique and is all a person needs in order to
+   pick each one and listen. The identifier itself is printed once, next to the
+   voice in use, where it is diagnosis rather than decoration. */
+function jaLabels(list){
+  var n=list.length, i, k;
+  var base=list.map(function(v){ return (v && v.name) || "voice"; });
+  var out=base.slice(), groups={};
+  for(i=0;i<n;i++){ (groups[base[i]]=groups[base[i]]||[]).push(i); }
+  for(var nm in groups){
+    var g=groups[nm];
+    if(g.length<2) continue;
+    var qs=g.map(function(ix){ return jaQuality(list[ix]); });
+    var uniq={}, allSet=true;
+    for(k=0;k<qs.length;k++){ if(!qs[k]) allSet=false; uniq[qs[k]]=1; }
+    if(allSet && Object.keys(uniq).length===g.length){
+      for(k=0;k<g.length;k++) out[g[k]]=nm+" \u00b7 "+qs[k];
+    } else {
+      for(k=0;k<g.length;k++) out[g[k]]=nm+" \u00b7 "+(k+1);
+    }
+  }
+  return out;
 }
 function jaLabel(v, list){
-  var nm=(v&&v.name)||"voice", dup=0, i;
-  for(i=0;i<list.length;i++) if(((list[i].name)||"")===nm) dup++;
-  return dup>1 ? nm+" \u00b7 "+jaQuality(v) : nm;
+  var l=jaLabels(list), i;
+  for(i=0;i<list.length;i++) if(list[i]===v) return l[i];
+  return (v && v.name) || "voice";
 }
 function jaRanked(){
   var v=(TTS.voices||[]).slice();
@@ -3878,8 +3907,9 @@ function renderJaVoicePicker(){
   var sel=document.getElementById("setJaVoice"); if(!sel) return;
   var list=jaRanked(), cur=S.settings.jaVoice||"auto", html="", i;
   html+='<option value="auto">Best available</option>';
+  var labels=jaLabels(list);
   for(i=0;i<list.length;i++){
-    html+='<option value="'+esc(vId(list[i]))+'">'+esc(jaLabel(list[i], list))+'</option>';
+    html+='<option value="'+esc(vId(list[i]))+'">'+esc(labels[i])+'</option>';
   }
   sel.innerHTML=html;
   var found=(cur==="auto");
@@ -3892,7 +3922,12 @@ function renderJaVoicePicker(){
       : (top.length>1 && S.settings.speechVary!==false && (S.settings.jaVoice||"auto")==="auto")
         ? top.map(function(v){ return jaLabel(v, list); }).join(", ")
         : jaLabel(jaVoice()||list[0], list);
-    now.textContent=label;
+    /* The identifier, printed once. Two voices called Kyoko cost three rounds
+       of guessing because nothing on screen said what the phone was reporting. */
+    var one=(top.length>1 && (S.settings.jaVoice||"auto")==="auto" && S.settings.speechVary!==false)
+      ? null : (jaVoice()||list[0]);
+    var idtxt=(one && vId(one) && vId(one)!==one.name) ? " ("+vId(one)+")" : "";
+    now.textContent=label+idtxt;
   }
 }
 function renderEnVoicePicker(){
@@ -4208,7 +4243,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
+      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,

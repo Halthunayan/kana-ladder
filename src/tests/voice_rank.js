@@ -168,7 +168,33 @@ const opaque=await p.evaluate(async()=>{
   return {labels:list.map(v=>k.jaLabel(v,list)), used:[...new Set(got)]};
 });
 ok(opaque.labels[0]!==opaque.labels[1],'the two are still told apart in the list ('+JSON.stringify(opaque.labels)+')');
+ok(opaque.labels[0]==='Kyoko \u00b7 1' && opaque.labels[1]==='Kyoko \u00b7 2','numbered, since nothing in the identifiers names a quality ('+JSON.stringify(opaque.labels)+')');
 ok(opaque.used.length===1,'and one of them is chosen consistently, not alternated ('+JSON.stringify(opaque.used)+')');
+
+console.log('\n6d. his phone: two Kyokos whose identifiers BOTH say compact');
+/* What the picker actually showed: "Kyoko - compact" twice, because naming the
+   quality distinguished nothing. A label that is not unique is not a label. */
+const both=await p.evaluate(()=>{
+  const k=window.__kl;
+  k.TTS.voices=[
+    {name:'Kyoko',lang:'ja-JP',voiceURI:'com.apple.voice.compact.ja-JP.Kyoko',localService:true,default:true},
+    {name:'Kyoko',lang:'ja-JP',voiceURI:'com.apple.voice.compact.ja-JP.Kyoko.2',localService:true}];
+  const list=k.jaRanked();
+  return {labels:k.jaLabels(list), top:k.jaTop().length};
+});
+ok(both.labels[0]!==both.labels[1],'the two are given different labels ('+JSON.stringify(both.labels)+')');
+ok(both.labels.filter(x=>/compact$/.test(x)).length===0,'the word compact, which both carry, is not used at all ('+JSON.stringify(both.labels)+')');
+ok(both.labels[0]==='Kyoko \u00b7 1' && both.labels[1]==='Kyoko \u00b7 2','they are simply numbered, so each can be chosen and heard ('+JSON.stringify(both.labels)+')');
+ok(both.top===1,'only one of them is in the rotation pool ('+both.top+')');
+
+console.log('\n6e. identical name AND identical identifier still yields a usable list');
+const same=await p.evaluate(()=>{
+  const k=window.__kl;
+  k.TTS.voices=[{name:'Kyoko',lang:'ja-JP',voiceURI:'x'},{name:'Kyoko',lang:'ja-JP',voiceURI:'x'}];
+  const list=k.jaRanked();
+  return k.jaLabels(list);
+});
+ok(same[0]==='Kyoko \u00b7 1' && same[1]==='Kyoko \u00b7 2','numbered rather than duplicated ('+JSON.stringify(same)+')');
 
 console.log('\n7. no page errors');
 ok(errs.length===0,'the app ran clean'+(errs.length?': '+errs[0]:''));
