@@ -1515,6 +1515,19 @@ function speakCard(c, slow){
   if(!c) return;
   var base=S.settings.speechRate||0.85;
   var rate = slow ? Math.max(0.4, base-0.30) : base;
+  /* The phone's own Japanese voice reads the card. The pre-rendered library
+     exists for one reason: iOS will not route Web Speech to CarPlay. That is a
+     car mode problem and only a car mode problem. Routing study cards through
+     it as well was a mistake, and an expensive one: the library is a small
+     model that mispronounces a word standing on its own, so yon arrived as
+     "yeiiin" on every card, while the phone's own voice had been saying it
+     correctly all along. The library stays where it is needed and nowhere
+     else, and it is still the fallback for a phone with no Japanese voice. */
+  if(ttsReady() && S.settings.cardAudio!==true){
+    SAY_GEN++;
+    slow ? speakSlow(c.kana) : speak(c.kana);
+    return;
+  }
   var key=clipFor(c);
   if(key && audOn()){
     var g=++SAY_GEN;
@@ -3669,6 +3682,8 @@ function applySettings(){
   document.getElementById("setSentN").value=S.settings.sentPerDay;
   document.getElementById("setConj").setAttribute("aria-checked",String(S.settings.conj!==false));
   document.getElementById("setConjN").value=S.settings.conjPerDay;
+  (function(){ var b=document.getElementById("setCardAudio");
+    if(b) b.setAttribute("aria-checked", String(S.settings.cardAudio===true)); })();
   document.getElementById("setRate").value=Math.round((S.settings.speechRate||0.85)*100);
   document.getElementById("setVary").setAttribute("aria-checked",String(S.settings.speechVary!==false));
   document.getElementById("setAuto").setAttribute("aria-checked",String(S.settings.autoPlay!==false));
@@ -3787,6 +3802,10 @@ function bindSettings(){
     var want=!audOn();
     S.settings.carAudio=want; this.setAttribute("aria-checked",String(want));
     save(); renderAudNote();
+  });
+  document.getElementById("setCardAudio").addEventListener("click",function(){
+    var want = S.settings.cardAudio!==true;
+    S.settings.cardAudio = want; this.setAttribute("aria-checked", String(want)); save();
   });
   document.getElementById("audGet").addEventListener("click",function(){ audDownload(); });
   document.getElementById("audTest").addEventListener("click",function(){
@@ -4031,7 +4050,7 @@ if("serviceWorker" in navigator){
       CAR:CAR, carWords:carWords, carStart:carStart, carBegin:carBegin, carPick:carPick,
       carAdvance:carAdvance, carSkip:carSkip, carRepeat:carRepeat, carPause:carPause,
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
-      carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
+      carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
