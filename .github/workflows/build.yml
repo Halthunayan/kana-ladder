@@ -115,6 +115,9 @@ jobs:
       - name: listening recovers and never fails silently
         run: node src/tests/tts_recovery.js
 
+      - name: every word card carries a worked example
+        run: PORT=8100 node src/tests/examples_check.js
+
   deploy:
     needs: [build, test]
     runs-on: ubuntu-latest
