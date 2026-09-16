@@ -408,13 +408,30 @@ button.drill:active{transform:scale(.98);background:var(--paper-2)}
 .sheet-in .fine{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin:0}
 
 /* the one unknown word a sentence is allowed to carry */
-.gap-box{margin-top:14px;padding:11px 13px;border:1px dashed var(--line);border-radius:10px;
+.gap-box{margin-top:14px;padding:11px 13px;border:1px dashed var(--rule);border-radius:10px;
   background:var(--paper-2);display:flex;flex-direction:column;gap:7px}
 .gap-lab{font-size:.68rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
 .gap-word{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
 .gap-k{font-family:var(--jp);font-size:1.12rem;color:var(--ink)}
 .gap-r{font-family:var(--mono);font-size:.9rem;color:var(--ai)}
 .gap-e{font-size:.88rem;color:var(--ink-2);width:100%}
+
+/* one worked example per word, on the back of the card. It sits close under the
+   answer and well clear of the tags, because it is part of the answer and not
+   metadata, and it keeps one left edge from card to card rather than centring
+   and jumping about as the text length changes. */
+.ex-box{margin:8px auto 16px;padding:10px 12px;border:1px solid var(--rule);border-radius:10px;
+  background:var(--paper-2);display:flex;flex-direction:column;gap:4px;text-align:left;
+  width:100%;max-width:min(31ch,100%)}
+.ex-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+/* deliberately not the colour of a tag chip: this labels the answer, the chips
+   label the card */
+.ex-lab{font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ai);opacity:.85}
+.ex-play{appearance:none;border:0;background:none;padding:0;line-height:0;cursor:pointer;color:var(--ai)}
+.ex-play svg{width:17px;height:17px}
+/* romaji is space delimited, so it must never break inside a word */
+.ex-r{font-family:var(--mono);font-size:.88rem;line-height:1.45;color:var(--ink);overflow-wrap:normal}
+.ex-e{font-size:.85rem;line-height:1.4;color:var(--ink-2)}
 
 /* ---------- car mode ---------- */
 /* Practice and Car sit side by side, so the two ways of studying read as a

@@ -13,6 +13,7 @@ deck=open(R('deck', 'deck_full.json'),encoding='utf-8').read()
 sent=open(R('sentences', 'sent_full.json'),encoding='utf-8').read()
 conj=open(R('conj', 'anchors.json'),encoding='utf-8').read()
 forms=open(R('conj', 'forms.json'),encoding='utf-8').read()
+examples=open(R('deck', 'examples.json'),encoding='utf-8').read()
 
 # ---- guard: no two top level declarations may share a name ----
 # Twice in two days a new function or variable was given a name the app already
@@ -58,6 +59,44 @@ for _x in _s: _gs[_gloss(_x['en'])].append(_x['id'])
 for _e in _d: _gs[_gloss(_e['en'])].append(_e['id'])
 _gdup=[(k,v) for k,v in _gs.items() if len(v)>1]
 assert not _gdup, 'two items share an English gloss, so the English to Japanese prompt is unanswerable: %r' % _gdup[:8]
+# An English gloss that differs from another only by word order or by an
+# article is the same prompt to the person reading it. The exact-match check
+# above cannot see that: "pleased to meet you (polite)" and "pleased to meet
+# you / regards" are different strings and were two different answers to one
+# question for weeks. Articles are dropped because English has them and
+# Japanese does not; nothing else is, because this, that, my, your, and, or
+# and the question word all carry meaning the learner has to reproduce.
+# A question mark is not punctuation here, it is the difference between "this
+# is my book" and "is this my book", which are two different Japanese sentences.
+# It is kept as a token of its own rather than stripped with the rest.
+_ART={'a','an','the'}
+def _wordset(_t):
+    _t=_t.lower()
+    _q=' qmark' if '?' in _t else ''
+    _t=_re.sub(r'[^a-z0-9 ]',' ',_t)+_q
+    return frozenset(_w for _w in _t.split() if _w and _w not in _ART)
+_ws=_c.defaultdict(list)
+for _x in _s: _ws[_wordset(_x['en'])].append((_x['id'], _x['en']))
+for _e in _d: _ws[_wordset(_e['en'])].append((_e['id'], _e['en']))
+_wdup=[_v for _k,_v in _ws.items() if _k and len(_v)>1]
+assert not _wdup, ('two items ask the same English question once word order and '
+                   'articles are ignored, so the prompt has no single answer: %r' % _wdup[:5])
+
+# The English side of a card is the whole prompt in the English to Japanese
+# direction. A bracketed note that repeats a word of the answer's own romaji
+# hands him the answer: "I am a doctor (wa, saying what my job is)" is not a
+# test. Rewriting the English so it carries the difference is the fix; this
+# refuses the shortcut. A note that names a DIFFERENT word, as "softer than
+# kara" does, is a real teaching note and is left alone.
+for _e in list(_d)+list(_s):
+    _mine={_w for _w in _re.split(r'[^a-z]+', _e['romaji'].lower()) if len(_w)>1}
+    for _note in _re.findall(r'\(([^)]*)\)', _e['en']):
+        _hit=sorted(_mine.intersection(
+            _w for _w in _re.split(r'[^a-z]+', _note.lower()) if len(_w)>1))
+        assert not _hit, ('the English prompt for %s repeats its own answer, '
+                          'so the card gives itself away: %r in %r'
+                          % (_e['id'], _hit, _e['en']))
+
 _kana=_re.compile(r'^[\u3040-\u309f\u30a0-\u30ff\u30fc]+$')
 for _e in _d:
     assert _kana.match(_e['kana']), 'card %s has a non-kana face: %s' % (_e['id'], _e['kana'])
@@ -86,6 +125,56 @@ for _wid, _row in _fm.items():
         assert _K.check(_row[_i+1], _row[_i+2])[0] == 'OK', \
             'generated form %s does not match its romaji: %s / %s' % (_wid, _row[_i+1], _row[_i+2])
         _forms_n += 1
+
+# ---- guard: every word carries one worked example, and it resolves ----
+# A word on its own teaches recognition and nothing about use. Every word card
+# now shows one sentence on its back. Where the deck already has a sentence the
+# example is a reference to it and costs nothing; where it does not, the line is
+# carried inline. Either way the page must be able to resolve it, or the card
+# shows an empty box.
+_ex = _j.loads(examples)
+_sids = {_x['id'] for _x in _s}
+_sbyid = {_x['id']: _x for _x in _s}
+_bykana = _c.defaultdict(list)
+for _e in _d: _bykana[_e['kana']].append(_e['id'])
+_shared_kana = {_i for _v in _bykana.values() if len(_v) > 1 for _i in _v}
+_page_ex = {}
+for _e in _d:
+    _v = _ex.get(_e['id'])
+    assert _v, 'word %s (%s) has no example sentence' % (_e['id'], _e['romaji'])
+    if isinstance(_v, str):
+        assert _v in _sids, 'the example for %s points at missing sentence %s' % (_e['id'], _v)
+        # A borrowed sentence has to actually contain the word, or the card
+        # teaches whatever the sentence happens to be about. And a card whose
+        # kana is shared with another card can never borrow one at all: the
+        # same sentence fits both spellings, so half of every such pair would
+        # be taught the wrong meaning, which is exactly what happened to hana
+        # (nose) being illustrated with flowers.
+        assert _e['id'] not in _shared_kana, \
+            ('%s shares its kana with another card, so it cannot borrow sentence %s; '
+             'it needs an example written for it' % (_e['id'], _v))
+        _x = _sbyid[_v]
+        _row = _fm.get(_e['id'])
+        _hit = (_e['kana'] in _x['kana']
+                or _e['id'] in (_x.get('g') or {})
+                or (_row and any(_row[_i+1] in _x['kana'] for _i in range(0, len(_row), 3)))
+                or (_e.get('pos') in ('verb', 'adj-i') and len(_e['kana']) > 2
+                    and _e['kana'][:-1] in _x['kana']))
+        assert _hit, ('the example for %s (%s) is sentence %s, which does not contain it: %s'
+                      % (_e['id'], _e['romaji'], _v, _x['romaji']))
+        _page_ex[_e['id']] = _v
+    else:
+        assert len(_v) == 3 and _v[1].strip() and _v[2].strip(), \
+            'the written example for %s is not kana, romaji and English' % _e['id']
+        assert _K.check_sentence(_v[0], _v[1]), \
+            'the written example for %s does not read as its romaji: %s / %s' % (_e['id'], _v[0], _v[1])
+        # the phone never shows the kana, so it never has to carry it
+        _page_ex[_e['id']] = [_v[1], _v[2]]
+examples = _j.dumps(_page_ex, ensure_ascii=False, separators=(',', ':'))
+print('examples: %d words, %d pointing at a deck sentence, %d written inline'
+      % (len(_page_ex), sum(1 for _v in _page_ex.values() if isinstance(_v, str)),
+         sum(1 for _v in _page_ex.values() if not isinstance(_v, str))))
+
 print('guards passed: %d words, %d sentences, %d anchors, %d generated forms, all romaji verified'
       % (len(_d), len(_s), len(_cj), _forms_n))
 
@@ -93,6 +182,7 @@ tail=('\n<script type="application/json" id="deck-data">'+deck+'</script>'
       '\n<script type="application/json" id="sent-data">'+sent+'</script>'
       '\n<script type="application/json" id="conj-data">'+conj+'</script>'
       '\n<script type="application/json" id="forms-data">'+forms+'</script>'
+      '\n<script type="application/json" id="example-data">'+examples+'</script>'
       '\n<script>\n'+js+'\n</script>\n')
 
 # ---- PWA: complete standalone document ----

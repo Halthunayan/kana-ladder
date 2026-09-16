@@ -6,6 +6,12 @@ var POS_JA = {noun:"名詞",verb:"動詞","adj-i":"形容詞","adj-na":"形容�
 var POS_EN = {noun:"noun",verb:"verb","adj-i":"i-adjective","adj-na":"na-adjective",adv:"adverb",expr:"expression",
   particle:"particle",counter:"counter",pron:"pronoun",num:"number",conj:"conjunction",interj:"interjection"};
 var SENT = JSON.parse(document.getElementById("sent-data").textContent);
+/* One worked example per word, shown on the back of the card once the answer
+   is out. It is romaji and English only: he does not read Japanese, and putting
+   the example on the front would hand him the answer in either direction. */
+var EXAMPLE = JSON.parse(document.getElementById("example-data").textContent);
+var SIDX = {};
+SENT.forEach(function(x){ SIDX[x.id]=x; });
 var IDX = {};
 DECK.forEach(function(c,i){ c._i=i; c.t="w"; IDX[c.id]=c; });
 /* Fourteen pairs of cards share a kana face, so an audio question about one of
@@ -1556,6 +1562,32 @@ function gapHtml(c){
   if(!out) return "";
   return '<div class="gap-box"><div class="gap-lab">new word in this sentence</div>'+out+'</div>';
 }
+/* A word on its own is not much use; one sentence showing it in place is. The
+   example is a reference to a sentence already in the deck where there is one,
+   and a written line where there is not, so the common case costs no bytes. */
+function exampleFor(c){
+  if(!c || isSent(c) || isConj(c) || c.practiceOnly) return null;
+  var e = EXAMPLE[c.id];
+  if(!e) return null;
+  if(typeof e === "string"){
+    var x = SIDX[e];
+    /* the sentence is in the deck, so its clip is in the library already */
+    return x ? {romaji:x.romaji, en:x.en, key:"sj:"+x.id} : null;
+  }
+  return (e[0] && e[1]) ? {romaji:e[0], en:e[1], key:null} : null;
+}
+function exHtml(c){
+  var e = exampleFor(c);
+  if(!e) return "";
+  /* The button is there only when there is something to press: an example that
+     is a deck sentence has a recorded clip, one written for this card does not
+     yet. Romaji with no way to hear it teaches a pronunciation he invented, so
+     where the sound exists it is offered. */
+  var play = e.key ? '<button class="ex-play" data-ex-key="'+esc(e.key)+'" aria-label="Play the example">'+SPK+'</button>' : "";
+  return '<div class="ex-box"><div class="ex-head"><span class="ex-lab">example</span>'+play+'</div>'+
+    '<div class="ex-r">'+esc(e.romaji)+'</div>'+
+    '<div class="ex-e">'+esc(e.en)+'</div></div>';
+}
 function noteHtml(c){
   var n=S.notes[c.id];
   return n ? '<div class="cardnote">'+esc(n)+'</div>' : "";
@@ -1716,7 +1748,7 @@ function renderCard(){
       '<div class="hint">What did you hear?<br><span class="sub2">tap to play again</span></div>'+
       '<button class="slowbtn" data-slow="1">Play it slower</button>';
     back.innerHTML = jpBlockHtml(c) +
-      '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+      '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else if(isConj(c)){
     var ruleHtml = c.rule ? '<div class="conj-rule">'+esc(c.rule)+'</div>' : "";
     front.innerHTML =
@@ -1729,12 +1761,12 @@ function renderCard(){
   } else if(d==="j"){
     front.innerHTML = jpBlockHtml(c) +
       '<div class="hint">'+(Sess.focus?"From memory: what does this mean?":"What does this mean?")+'</div>';
-    back.innerHTML = '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    back.innerHTML = '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else {
     front.innerHTML = '<div class="english">'+esc(c.en)+'</div>'+
       '<div class="hint">Say it in Japanese</div>'+
       (S.settings.typing ? '<div class="typebox"><input id="typeIn" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="romaji"></div><div class="verdict" id="verdict"></div>' : "");
-    back.innerHTML = jpBlockHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    back.innerHTML = jpBlockHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   }
   wireSpeak(c);
   wireLeech(c,k);
@@ -1777,6 +1809,18 @@ function wireSpeak(c){
       e.stopPropagation();
       if(!S.settings.tts){ toast("Read aloud is off in Settings"); return; }
       speakCard(c);
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".card [data-ex-key]"),function(b){
+    b.addEventListener("click",function(e){
+      e.stopPropagation();
+      var key=b.getAttribute("data-ex-key");
+      if(!audOn()){ toast("Turn the downloaded voice on in Settings to hear examples"); return; }
+      var g=++SAY_GEN;
+      audStop();
+      audPlay(key, 1, function(){ return g===SAY_GEN; }).then(function(ok){
+        if(!ok && g===SAY_GEN) toast("That example has no recording yet");
+      });
     });
   });
 }
@@ -3987,7 +4031,7 @@ if("serviceWorker" in navigator){
       CAR:CAR, carWords:carWords, carStart:carStart, carBegin:carBegin, carPick:carPick,
       carAdvance:carAdvance, carSkip:carSkip, carRepeat:carRepeat, carPause:carPause,
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
-      carGapMs:carGapMs, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
+      carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
