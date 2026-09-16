@@ -8,13 +8,15 @@ await ctx.addInitScript(()=>{
   window.__spoken=[];
   const v=[{lang:'ja-JP',name:'Kyoko'},{lang:'ja-JP',name:'Otoya'}];
   // a plain stand-in for the utterance, so a stubbed voice can actually be set
-  window.SpeechSynthesisUtterance=function(t){ this.text=t; this.lang=''; this.rate=1; this.voice=null; };
+  window.SpeechSynthesisUtterance=function(t){ this.text=t; this.lang=''; this.rate=1; this.voice=null; this.volume=1; };
   try{ Object.defineProperty(window.speechSynthesis,'getVoices',{value:()=>v}); }catch(e){}
   /* onstart has to fire. The app now treats an utterance that never starts as
      a voice iOS lists but cannot speak with, and says the line again without
      naming one. A stub that records and stays silent looks exactly like that
      fault, and the reveal assertion below then sees the retry. */
-  try{ window.speechSynthesis.speak=(u)=>{ window.__spoken.push({t:u.text,r:u.rate,v:u.voice&&u.voice.name});
+  /* The silent trial the app runs on each voice is at volume 0 and is not
+     heard; recording it would make every assertion below count a phantom. */
+  try{ window.speechSynthesis.speak=(u)=>{ if(u.volume!==0) window.__spoken.push({t:u.text,r:u.rate,v:u.voice&&u.voice.name});
          setTimeout(()=>{ u.onstart&&u.onstart(); u.onend&&u.onend(); },5); };
        window.speechSynthesis.cancel=()=>{}; }catch(e){}
   const now=Date.now(), items={};
@@ -86,7 +88,7 @@ await ctx2.addInitScript(()=>{
   window.__spoken=[];
   const v=[{lang:'ja-JP',name:'Kyoko'}];
   try{ Object.defineProperty(window.speechSynthesis,'getVoices',{value:()=>v}); }catch(e){}
-  try{ window.speechSynthesis.speak=(u)=>{ window.__spoken.push({t:u.text}); };
+  try{ window.speechSynthesis.speak=(u)=>{ if(u.volume!==0) window.__spoken.push({t:u.text}); };
        window.speechSynthesis.cancel=()=>{}; }catch(e){}
   const now=Date.now(), items={};
   items['c0116|j']=[1,0,6,2.5,60,now+60*86400000,0,0,9,9,5,60,now-3*86400000];
@@ -118,7 +120,7 @@ await ctx3.addInitScript(()=>{
   window.__spoken=[];
   const v=[{lang:'ja-JP',name:'Kyoko'}];
   try{ Object.defineProperty(window.speechSynthesis,'getVoices',{value:()=>v}); }catch(e){}
-  try{ window.speechSynthesis.speak=(u)=>{ window.__spoken.push({t:u.text}); };
+  try{ window.speechSynthesis.speak=(u)=>{ if(u.volume!==0) window.__spoken.push({t:u.text}); };
        window.speechSynthesis.cancel=()=>{}; }catch(e){}
   const now=Date.now(), items={};
   items['c0115|j']=[1,0,6,2.5,30,now+30*86400000,0,0,9,9,5,30,now-3*86400000];

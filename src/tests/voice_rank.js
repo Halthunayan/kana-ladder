@@ -30,8 +30,11 @@ const ctx=await b.newContext({viewport:{width:393,height:852}});
 await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base());
 await ctx.addInitScript(v=>{ window.__spoke=[]; window.__voice=[];
   try{Object.defineProperty(window.speechSynthesis,'getVoices',{value:()=>v});}catch(e){}
-  window.SpeechSynthesisUtterance=function(t){this.text=t;this.rate=1;};
-  try{ window.speechSynthesis.speak=u=>{ window.__spoke.push(u.text); window.__voice.push(u.voice?u.voice.name:null);
+  window.SpeechSynthesisUtterance=function(t){this.text=t;this.rate=1;this.volume=1;};
+  /* The app tries each voice out with a silent utterance before any card uses
+     one. volume 0 is inaudible, so a capture that records it is recording
+     something the person never hears. */
+  try{ window.speechSynthesis.speak=u=>{ if(u.volume!==0){ window.__spoke.push(u.text); window.__voice.push(u.voice?u.voice.name:null); }
         /* onstart matters: the app now treats an utterance that never starts as a
            voice that cannot speak, and retries it without one. A stub that stays
            silent is indistinguishable from the fault this exists to catch. */

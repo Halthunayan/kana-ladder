@@ -1393,7 +1393,7 @@ function ttsScan(){
   TTS.voices=ja;
   TTS.ja=ja.length>0;
   if(v.length) TTS.seen=true;
-  if(TTS.ja!==was){ TTS.checked=true; try{ render(); }catch(e){} return true; }
+  if(TTS.ja!==was){ TTS.checked=true; try{ render(); }catch(e){} try{ setTimeout(jaVerify,400); }catch(e){} return true; }
   if(TTS.ja) TTS.checked=true;
   return false;
 }
@@ -1408,6 +1408,7 @@ function ttsNudge(){
   }catch(e){}
   setTimeout(ttsScan, 300);
   setTimeout(ttsScan, 1200);
+  setTimeout(jaVerify, 1500);
 }
 function ttsProbe(){
   if(!("speechSynthesis" in window)) { TTS.checked=true; return; }
@@ -1421,7 +1422,12 @@ function ttsProbe(){
     document.addEventListener(ev, ttsNudge, {once:false, passive:true});
   });
   document.addEventListener("visibilitychange",function(){
-    if(document.visibilityState==="visible" && !TTS.ja) setTimeout(ttsScan,200);
+    if(document.visibilityState!=="visible") return;
+    if(!TTS.ja) setTimeout(ttsScan,200);
+    /* A voice can be added or removed while the app is in the background, and
+       an unproven one is tried out when it comes back rather than on the line
+       he is waiting for. */
+    setTimeout(jaVerify,600);
   });
 }
 /* Real speech is not one voice at one fixed speed. A card that always plays at
@@ -1611,32 +1617,74 @@ function enVoice(){
    rest of the session and the line is spoken again with no voice named at all,
    which leaves iOS to use whatever it really has. A voice that cannot speak
    can therefore cost one line, once, instead of all of them forever. */
-var BAD_VOICE={};
+/* Deciding whether a voice works from the line the ear is waiting for cannot
+   be made to work. Tap faster than the check window and every check belongs to
+   a line that has already been replaced, so nothing is ever learned and one tap
+   in eight is heard. The voices are therefore tried out ahead of time, silently
+   and one at a time, on the first touch the page receives, which is also the
+   moment WebKit first admits it has any. A voice that will not start a silent
+   utterance is struck off before a card ever asks for it. The per-line check
+   stays as a backstop for a voice that dies later. */
+var BAD_VOICE={}, VOICE_OK={}, VERIFYING=0;
 function voiceFailed(v){ if(v) BAD_VOICE[vId(v)]=1; }
+function jaVerify(){
+  if(VERIFYING || !("speechSynthesis" in window) || !S.settings.tts) return;
+  var list=TTS.voices||[], i, v=null, id;
+  for(i=0;i<list.length;i++){
+    id=vId(list[i]);
+    if(!VOICE_OK[id] && !BAD_VOICE[id]){ v=list[i]; break; }
+  }
+  if(!v) return;
+  /* never over the top of something the person is listening to */
+  try{ if(speechSynthesis.speaking || speechSynthesis.pending){ setTimeout(jaVerify, 900); return; } }catch(e){}
+  id=vId(v); VERIFYING=1;
+  var gen=SPEAK_GEN, ok=false;
+  try{
+    var u=new SpeechSynthesisUtterance("\u3042");
+    u.lang="ja-JP"; u.rate=1; u.volume=0;
+    try{ u.voice=v; }catch(e){}
+    u.onstart=function(){ ok=true; };
+    speechSynthesis.speak(u);
+  }catch(e){ VERIFYING=0; return; }
+  setTimeout(function(){
+    VERIFYING=0;
+    try{
+      /* a real line interrupted the trial, so it proved nothing: try again later */
+      if(gen!==SPEAK_GEN){ setTimeout(jaVerify, 1200); return; }
+      if(ok) VOICE_OK[id]=1; else BAD_VOICE[id]=1;
+      speechSynthesis.cancel();
+      renderJaVoicePicker();
+    }catch(e){}
+    setTimeout(jaVerify, 80);
+  }, 900);
+}
+/* Nothing here waits on a timer. A line is spoken and that is the end of it.
+   There was a timer once: it watched for a line that never started and said it
+   again without naming a voice. It had to wait, because a voice iOS cannot use
+   reports nothing at all and absence is only visible after time has passed. But
+   taps come faster than any window worth waiting, and the timer belonging to
+   one tap fired in the middle of the next, cancelled it and spoke over the top,
+   while that tap's own timer found the engine busy and concluded all was well.
+   Eight taps, one heard. The question a timer can answer here is which voices
+   work, and that does not have to be asked while somebody is listening: see
+   jaVerify, which asks it once, silently, before any card needs an answer.
+   SPEAK_GEN is kept because jaVerify uses it to tell an interrupted trial from
+   a failed one. */
+var SPEAK_GEN=0;
 function speakAt(text, rate, fixedVoice){
   if(!S.settings.tts || !("speechSynthesis" in window)) return;
   try{
+    SPEAK_GEN++;
     speechSynthesis.cancel();
     var u=new SpeechSynthesisUtterance(text);
     u.lang="ja-JP";
     u.rate=clamp(rate,0.4,1.5);
     // a rejected voice must never take the whole playback down with it
-    var used=null;
-    if(!fixedVoice){ var v=jaVoice(); if(v){ try{ u.voice=v; used=v; }catch(e){} } }
-    var started=false;
-    try{ u.onstart=function(){ started=true; }; }catch(e){}
+    if(!fixedVoice){
+      var v=jaVoice();
+      if(v){ try{ u.voice=v; u.onstart=function(){ VOICE_OK[vId(v)]=1; }; }catch(e){} }
+    }
     speechSynthesis.speak(u);
-    if(used) setTimeout(function(){
-      try{
-        if(started || speechSynthesis.speaking || speechSynthesis.pending) return;
-        voiceFailed(used);
-        speechSynthesis.cancel();
-        var u2=new SpeechSynthesisUtterance(text);
-        u2.lang="ja-JP"; u2.rate=clamp(rate,0.4,1.5);
-        speechSynthesis.speak(u2);
-        try{ renderJaVoicePicker(); }catch(e){}
-      }catch(e){}
-    }, 700);
   }catch(e){}
 }
 /* A clip if there is one, the device voice otherwise. speakCard is what every
@@ -4290,7 +4338,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, BAD_VOICE:BAD_VOICE, voiceFailed:voiceFailed, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
+      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, BAD_VOICE:BAD_VOICE, VOICE_OK:VOICE_OK, jaVerify:jaVerify, voiceFailed:voiceFailed, speakAt:speakAt, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,

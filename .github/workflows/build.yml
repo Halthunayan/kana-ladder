@@ -137,6 +137,9 @@ jobs:
       - name: audio, on both channels
         run: node src/tests/audio.js
 
+      - name: the car voice reaches the audio element
+        run: node src/tests/car_audio.js
+
   deploy:
     needs: [build, test]
     runs-on: ubuntu-latest

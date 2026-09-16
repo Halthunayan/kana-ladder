@@ -28,14 +28,19 @@ const open=async(st,noJa)=>{
                   :[{lang:'ja-JP',name:'Kyoko'},{lang:'en-US',name:'Sam'}];
     try{Object.defineProperty(window.speechSynthesis,'getVoices',{value:()=>v});}catch(e){}
     window.__said=[];
-    window.SpeechSynthesisUtterance=function(x){ this.text=x; this.rate=1; this.voice=null; this.lang=''; };
+    window.SpeechSynthesisUtterance=function(x){ this.text=x; this.rate=1; this.voice=null; this.lang=''; this.volume=1; };
     try{
       window.speechSynthesis.speak=u=>{
+        // The app tries each voice out with a silent utterance before any line
+        // uses one. volume 0 is never heard, so a drive log that records it is
+        // logging something no one in the car can hear.
+        if(u.volume===0){ setTimeout(()=>{ if(typeof u.onstart==='function') u.onstart(); },5); return; }
         // stamped with drive time at the moment it is spoken, so a timing test
         // measures the play itself rather than when a poll happened to look
         var el=0; try{ el=window.__kl?Math.round(window.__kl.carEl()):0; }catch(e){}
         window.__said.push({t:u.text, lang:u.lang, rate:u.rate, el:el});
-        setTimeout(()=>{ if(typeof u.onend==='function') u.onend(); }, 20);
+        setTimeout(()=>{ if(typeof u.onstart==='function') u.onstart();
+                         if(typeof u.onend==='function') u.onend(); }, 20);
       };
       window.speechSynthesis.cancel=()=>{};
     }catch(e){}
