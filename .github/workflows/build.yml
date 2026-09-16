@@ -129,16 +129,27 @@ jobs:
       - name: the Japanese voice is ranked, and the robot never speaks
         run: node src/tests/voice_rank.js
 
-      # iOS lists voices it cannot actually speak with. Naming one produced
-      # silence on every card while the downloaded audio kept playing.
-      - name: a voice that cannot speak does not silence the app
-        run: node src/tests/phantom_voice.js
+      # Twice in one day the app went silent in both languages while the
+      # pre-rendered audio kept playing, and nine suites stayed green. Both
+      # times the cause was code added to the speech path that called cancel
+      # and speak on its own account. This asserts the engine is only ever
+      # asked for a line a card wants.
+      - name: the speech engine is only asked for lines a card wants
+        run: node src/tests/speech_engine.js
 
       - name: audio, on both channels
         run: node src/tests/audio.js
 
       - name: the car voice reaches the audio element
         run: node src/tests/car_audio.js
+
+      # Every other speech suite replaces the engine with a stub, and a stub
+      # always accepts a line. This one uses WebKit, which is what Safari runs.
+      - name: install webkit
+        run: npx playwright install --with-deps webkit
+
+      - name: the real engine survives the app
+        run: node src/tests/engine_webkit.js
 
   deploy:
     needs: [build, test]

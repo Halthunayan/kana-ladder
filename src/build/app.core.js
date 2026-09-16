@@ -1393,7 +1393,7 @@ function ttsScan(){
   TTS.voices=ja;
   TTS.ja=ja.length>0;
   if(v.length) TTS.seen=true;
-  if(TTS.ja!==was){ TTS.checked=true; try{ render(); }catch(e){} try{ setTimeout(jaVerify,400); }catch(e){} return true; }
+  if(TTS.ja!==was){ TTS.checked=true; try{ render(); }catch(e){} return true; }
   if(TTS.ja) TTS.checked=true;
   return false;
 }
@@ -1408,7 +1408,6 @@ function ttsNudge(){
   }catch(e){}
   setTimeout(ttsScan, 300);
   setTimeout(ttsScan, 1200);
-  setTimeout(jaVerify, 1500);
 }
 function ttsProbe(){
   if(!("speechSynthesis" in window)) { TTS.checked=true; return; }
@@ -1424,10 +1423,6 @@ function ttsProbe(){
   document.addEventListener("visibilitychange",function(){
     if(document.visibilityState!=="visible") return;
     if(!TTS.ja) setTimeout(ttsScan,200);
-    /* A voice can be added or removed while the app is in the background, and
-       an unproven one is tried out when it comes back rather than on the line
-       he is waiting for. */
-    setTimeout(jaVerify,600);
   });
 }
 /* Real speech is not one voice at one fixed speed. A card that always plays at
@@ -1458,7 +1453,6 @@ function vId(v){ return (v && (v.voiceURI || v.name)) || ""; }
 function vText(v){ return ((v&&v.name)||"")+" "+vId(v); }
 function jaScore(v){
   var n=vText(v).toLowerCase(), sc=0, i;
-  if(BAD_VOICE[vId(v)]) sc-=500;   // it was asked to speak and did not
   for(i=0;i<JA_ROBOT.length;i++) if(n.indexOf(JA_ROBOT[i])>=0) sc-=100;
   if(/enhanced|premium|neural/.test(n)) sc+=40;
   if(/compact/.test(n)) sc-=20;
@@ -1513,16 +1507,7 @@ function jaLabel(v, list){
   for(i=0;i<list.length;i++) if(list[i]===v) return l[i];
   return (v && v.name) || "voice";
 }
-/* A voice that was asked to speak and did not is not a candidate. Struck-off
-   voices leave the list entirely rather than merely ranking low, because on his
-   phone BOTH listed Kyokos are silent, and ranking the second one below the
-   first still names it and still produces nothing. When none is left, no voice
-   is named at all and iOS uses whatever it really has, which works. */
-function jaUsable(){
-  var l=TTS.voices||[], out=[], i;
-  for(i=0;i<l.length;i++) if(!BAD_VOICE[vId(l[i])]) out.push(l[i]);
-  return out;
-}
+function jaUsable(){ return (TTS.voices||[]).slice(); }
 function jaRanked(){
   var v=jaUsable().slice();
   v.sort(function(a,b){ var d=jaScore(b)-jaScore(a);
@@ -1606,73 +1591,32 @@ function enVoice(){
   var r=enRanked();
   return r.length ? r[0] : null;                // a stable choice, never a rotation
 }
-/* iOS lists voices it cannot actually speak with. Downloading Kyoko Enhanced
-   put a second entry called Kyoko in Safari's list, and assigning it to an
-   utterance produced silence: no error, no event, nothing. Every card went
-   quiet while the downloaded audio file kept playing, because only the device
-   voice was affected. Rotating used to hide this, since half the cards drew
-   the working voice; choosing one deterministically did not.
-   So the choice is now checked rather than trusted. If an utterance has not
-   started shortly after being handed over, that voice is struck off for the
-   rest of the session and the line is spoken again with no voice named at all,
-   which leaves iOS to use whatever it really has. A voice that cannot speak
-   can therefore cost one line, once, instead of all of them forever. */
-/* Deciding whether a voice works from the line the ear is waiting for cannot
-   be made to work. Tap faster than the check window and every check belongs to
-   a line that has already been replaced, so nothing is ever learned and one tap
-   in eight is heard. The voices are therefore tried out ahead of time, silently
-   and one at a time, on the first touch the page receives, which is also the
-   moment WebKit first admits it has any. A voice that will not start a silent
-   utterance is struck off before a card ever asks for it. The per-line check
-   stays as a backstop for a voice that dies later. */
-var BAD_VOICE={}, VOICE_OK={}, VERIFYING=0;
-function voiceFailed(v){ if(v) BAD_VOICE[vId(v)]=1; }
-function jaVerify(){
-  if(VERIFYING || !("speechSynthesis" in window) || !S.settings.tts) return;
-  var list=TTS.voices||[], i, v=null, id;
-  for(i=0;i<list.length;i++){
-    id=vId(list[i]);
-    if(!VOICE_OK[id] && !BAD_VOICE[id]){ v=list[i]; break; }
-  }
-  if(!v) return;
-  /* never over the top of something the person is listening to */
-  try{ if(speechSynthesis.speaking || speechSynthesis.pending){ setTimeout(jaVerify, 900); return; } }catch(e){}
-  id=vId(v); VERIFYING=1;
-  var gen=SPEAK_GEN, ok=false;
-  try{
-    var u=new SpeechSynthesisUtterance("\u3042");
-    u.lang="ja-JP"; u.rate=1; u.volume=0;
-    try{ u.voice=v; }catch(e){}
-    u.onstart=function(){ ok=true; };
-    speechSynthesis.speak(u);
-  }catch(e){ VERIFYING=0; return; }
-  setTimeout(function(){
-    VERIFYING=0;
-    try{
-      /* a real line interrupted the trial, so it proved nothing: try again later */
-      if(gen!==SPEAK_GEN){ setTimeout(jaVerify, 1200); return; }
-      if(ok) VOICE_OK[id]=1; else BAD_VOICE[id]=1;
-      speechSynthesis.cancel();
-      renderJaVoicePicker();
-    }catch(e){}
-    setTimeout(jaVerify, 80);
-  }, 900);
-}
-/* Nothing here waits on a timer. A line is spoken and that is the end of it.
-   There was a timer once: it watched for a line that never started and said it
-   again without naming a voice. It had to wait, because a voice iOS cannot use
-   reports nothing at all and absence is only visible after time has passed. But
-   taps come faster than any window worth waiting, and the timer belonging to
-   one tap fired in the middle of the next, cancelled it and spoke over the top,
-   while that tap's own timer found the engine busy and concluded all was well.
-   Eight taps, one heard. The question a timer can answer here is which voices
-   work, and that does not have to be asked while somebody is listening: see
-   jaVerify, which asks it once, silently, before any card needs an answer.
-   SPEAK_GEN is kept because jaVerify uses it to tell an interrupted trial from
-   a failed one. */
+/* Two attempts to be clever here silenced the app completely, in both
+   languages, while the pre-rendered audio kept playing. First a timer that
+   watched for a line that never started and said it again; then a silent trial
+   utterance for each voice at boot. Both call cancel and speak in quick
+   succession, and on iOS that is a reliable way to wedge the speech engine for
+   the life of the page: nothing then speaks, whatever voice is named, in any
+   language, and no amount of ranking or striking off makes any difference
+   because the engine has stopped listening. Both were built on a theory about
+   which voice was at fault that was never true, and both were shipped without
+   ever being run on the phone they were for.
+   This function says the line. It does not probe, retry, or measure. If a
+   voice turns out to be unusable there is a picker in Settings, which is a
+   worse outcome than automatic recovery and a far better one than silence. */
 var SPEAK_GEN=0;
+/* Six hours went on this because nothing on the phone could say what the phone
+   was doing. The fault could not be reproduced anywhere: a stubbed engine
+   always accepts a line, and the only real one available off-device uses a
+   different backend and never misbehaves. So the app records what it asked for
+   and what came back, and Settings shows it. Listening for onstart and onend
+   is not extra traffic to the engine, which is the whole reason the previous
+   two attempts to be clever here silenced it. Nothing in this log speaks. */
+var SPEECH_LOG=[];
+function speechNote(rec){ SPEECH_LOG.push(rec); if(SPEECH_LOG.length>16) SPEECH_LOG.shift(); }
 function speakAt(text, rate, fixedVoice){
-  if(!S.settings.tts || !("speechSynthesis" in window)) return;
+  if(!("speechSynthesis" in window)){ speechNote({t:text, why:"no engine in this browser"}); return; }
+  if(!S.settings.tts){ speechNote({t:text, why:"read aloud is off in settings"}); return; }
   try{
     SPEAK_GEN++;
     speechSynthesis.cancel();
@@ -1680,12 +1624,47 @@ function speakAt(text, rate, fixedVoice){
     u.lang="ja-JP";
     u.rate=clamp(rate,0.4,1.5);
     // a rejected voice must never take the whole playback down with it
-    if(!fixedVoice){
-      var v=jaVoice();
-      if(v){ try{ u.voice=v; u.onstart=function(){ VOICE_OK[vId(v)]=1; }; }catch(e){} }
-    }
+    var nm=null;
+    if(!fixedVoice){ var v=jaVoice(); if(v){ try{ u.voice=v; nm=v.name||vId(v); }catch(e){} } }
+    var rec={t:text, v:nm, at:Date.now(), started:false, ended:false, err:null};
+    speechNote(rec);
+    try{
+      u.onstart=function(){ rec.started=true; };
+      u.onend=function(){ rec.ended=true; };
+      u.onerror=function(e){ rec.err=(e&&e.error)||"error"; };
+    }catch(e){}
     speechSynthesis.speak(u);
-  }catch(e){}
+  }catch(e){ speechNote({t:text, why:"the engine threw: "+(e&&e.message||e)}); }
+}
+/* Read-only. It must never ask the engine for anything: a diagnostic that
+   speaks is the same mistake in a different coat. */
+function speechReport(){
+  var has=("speechSynthesis" in window), L=[], i, r;
+  L.push("read aloud: "+(S.settings.tts?"on":"OFF"));
+  L.push("engine: "+(has?"present":"MISSING"));
+  if(has){
+    var sp="?", pd="?";
+    try{ sp=String(speechSynthesis.speaking); pd=String(speechSynthesis.pending); }catch(e){}
+    L.push("speaking: "+sp+", pending: "+pd);
+  }
+  var vs=TTS.voices||[];
+  L.push("japanese voices seen: "+vs.length);
+  for(i=0;i<vs.length;i++) L.push("  "+(vs[i].name||"?")+"  "+vId(vs[i]));
+  L.push("setting: "+(S.settings.jaVoice||"auto"));
+  var cur=null; try{ cur=jaVoice(); }catch(e){}
+  L.push("would use: "+(cur?((cur.name||"?")+"  "+vId(cur)):"none, iOS picks"));
+  L.push("");
+  L.push("last "+SPEECH_LOG.length+" attempts, newest last:");
+  if(!SPEECH_LOG.length) L.push("  nothing has been asked for yet");
+  for(i=0;i<SPEECH_LOG.length;i++){
+    r=SPEECH_LOG[i];
+    if(r.why){ L.push("  skipped: "+r.why); continue; }
+    L.push("  "+(r.v||"no voice named")
+      +"  started:"+(r.started?"yes":"NO")
+      +"  ended:"+(r.ended?"yes":"no")
+      +(r.err?("  error:"+r.err):""));
+  }
+  return L.join("\n");
 }
 /* A clip if there is one, the device voice otherwise. speakCard is what every
    card now calls, so the listening card and the audio question are heard in
@@ -4103,6 +4082,13 @@ function bindSettings(){
     S.settings.jaVoice=this.value; save(); renderJaVoicePicker(); jaSample(); });
   document.getElementById("jaVoiceTest").addEventListener("click",function(){
     renderJaVoicePicker(); jaSample(); });
+  document.getElementById("speechDiagBtn").addEventListener("click",function(){
+    var box=document.getElementById("speechDiag");
+    if(!box) return;
+    box.textContent=speechReport();
+    box.hidden=!box.hidden;
+    this.textContent=box.hidden?"Show":"Hide";
+  });
   document.getElementById("setEnVoice").addEventListener("change",function(){
     S.settings.enVoice=this.value; save(); renderEnVoicePicker();
     carSay("This is how the English side will sound.","en",1.0); });
@@ -4338,7 +4324,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, BAD_VOICE:BAD_VOICE, VOICE_OK:VOICE_OK, jaVerify:jaVerify, voiceFailed:voiceFailed, speakAt:speakAt, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
+      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,

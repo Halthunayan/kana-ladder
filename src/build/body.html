@@ -365,6 +365,11 @@
       <button class="btn btn-ghost" id="jaVoiceTest">Test</button>
     </div>
     <div class="opt">
+      <div><div class="t">What the voice is actually doing</div><div class="d">Read-only. It asks the speech engine for nothing, it only reports what has already happened. If audio stops, open this and send a screenshot: it says whether the engine is there, which voices your phone offered, which one was named, and whether each line actually started. Guessing at that from the outside cost a whole day.</div></div>
+      <button class="btn btn-ghost" id="speechDiagBtn">Show</button>
+    </div>
+    <pre class="diagbox" id="speechDiag" hidden></pre>
+    <div class="opt">
       <div><div class="t">English voice</div><div class="d">Only used as the fallback, when the downloaded voice is off or missing. Safari offers a subset of the voices iOS has, and on many devices the English half of it is robotic. Pick whichever sounds human. Now using <b id="enVoiceNow">&mdash;</b>.</div></div>
       <select id="setEnVoice"><option value="auto">Best available</option></select>
     </div>
