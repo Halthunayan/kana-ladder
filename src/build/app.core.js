@@ -1452,6 +1452,7 @@ function vId(v){ return (v && (v.voiceURI || v.name)) || ""; }
 function vText(v){ return ((v&&v.name)||"")+" "+vId(v); }
 function jaScore(v){
   var n=vText(v).toLowerCase(), sc=0, i;
+  if(BAD_VOICE[vId(v)]) sc-=500;   // it was asked to speak and did not
   for(i=0;i<JA_ROBOT.length;i++) if(n.indexOf(JA_ROBOT[i])>=0) sc-=100;
   if(/enhanced|premium|neural/.test(n)) sc+=40;
   if(/compact/.test(n)) sc-=20;
@@ -1506,8 +1507,18 @@ function jaLabel(v, list){
   for(i=0;i<list.length;i++) if(list[i]===v) return l[i];
   return (v && v.name) || "voice";
 }
+/* A voice that was asked to speak and did not is not a candidate. Struck-off
+   voices leave the list entirely rather than merely ranking low, because on his
+   phone BOTH listed Kyokos are silent, and ranking the second one below the
+   first still names it and still produces nothing. When none is left, no voice
+   is named at all and iOS uses whatever it really has, which works. */
+function jaUsable(){
+  var l=TTS.voices||[], out=[], i;
+  for(i=0;i<l.length;i++) if(!BAD_VOICE[vId(l[i])]) out.push(l[i]);
+  return out;
+}
 function jaRanked(){
-  var v=(TTS.voices||[]).slice();
+  var v=jaUsable().slice();
   v.sort(function(a,b){ var d=jaScore(b)-jaScore(a);
     return d!==0 ? d : String(a.name||"").localeCompare(String(b.name||"")); });
   return v;
@@ -1532,9 +1543,10 @@ function jaTop(){
   return out;
 }
 function jaVoice(){
-  var want=S.settings.jaVoice, list=TTS.voices||[], i;
+  var want=S.settings.jaVoice, list=jaUsable(), i;
   /* pinned by identifier, not by name: two voices share the name Kyoko, so a
-     name would have pinned whichever happened to be first */
+     name would have pinned whichever happened to be first. A pin to a voice
+     that has since gone silent is ignored rather than honoured. */
   if(want && want!=="auto"){
     for(i=0;i<list.length;i++) if(vId(list[i])===want){ TTS.last=list[i]; return list[i]; }
     for(i=0;i<list.length;i++) if(list[i].name===want){ TTS.last=list[i]; return list[i]; }
@@ -1588,6 +1600,19 @@ function enVoice(){
   var r=enRanked();
   return r.length ? r[0] : null;                // a stable choice, never a rotation
 }
+/* iOS lists voices it cannot actually speak with. Downloading Kyoko Enhanced
+   put a second entry called Kyoko in Safari's list, and assigning it to an
+   utterance produced silence: no error, no event, nothing. Every card went
+   quiet while the downloaded audio file kept playing, because only the device
+   voice was affected. Rotating used to hide this, since half the cards drew
+   the working voice; choosing one deterministically did not.
+   So the choice is now checked rather than trusted. If an utterance has not
+   started shortly after being handed over, that voice is struck off for the
+   rest of the session and the line is spoken again with no voice named at all,
+   which leaves iOS to use whatever it really has. A voice that cannot speak
+   can therefore cost one line, once, instead of all of them forever. */
+var BAD_VOICE={};
+function voiceFailed(v){ if(v) BAD_VOICE[vId(v)]=1; }
 function speakAt(text, rate, fixedVoice){
   if(!S.settings.tts || !("speechSynthesis" in window)) return;
   try{
@@ -1596,8 +1621,22 @@ function speakAt(text, rate, fixedVoice){
     u.lang="ja-JP";
     u.rate=clamp(rate,0.4,1.5);
     // a rejected voice must never take the whole playback down with it
-    if(!fixedVoice){ var v=jaVoice(); if(v){ try{ u.voice=v; }catch(e){} } }
+    var used=null;
+    if(!fixedVoice){ var v=jaVoice(); if(v){ try{ u.voice=v; used=v; }catch(e){} } }
+    var started=false;
+    try{ u.onstart=function(){ started=true; }; }catch(e){}
     speechSynthesis.speak(u);
+    if(used) setTimeout(function(){
+      try{
+        if(started || speechSynthesis.speaking || speechSynthesis.pending) return;
+        voiceFailed(used);
+        speechSynthesis.cancel();
+        var u2=new SpeechSynthesisUtterance(text);
+        u2.lang="ja-JP"; u2.rate=clamp(rate,0.4,1.5);
+        speechSynthesis.speak(u2);
+        try{ renderJaVoicePicker(); }catch(e){}
+      }catch(e){}
+    }, 700);
   }catch(e){}
 }
 /* A clip if there is one, the device voice otherwise. speakCard is what every
@@ -4251,7 +4290,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
+      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, BAD_VOICE:BAD_VOICE, voiceFailed:voiceFailed, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,

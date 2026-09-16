@@ -18,7 +18,8 @@ const base=()=>({rev:9,
 const mic=()=>{ window.__spoke=[];
   try{Object.defineProperty(window.speechSynthesis,'getVoices',{value:()=>[{lang:'ja-JP',name:'Kyoko'}]});}catch(e){}
   window.SpeechSynthesisUtterance=function(t){this.text=t;this.rate=1;};
-  try{ window.speechSynthesis.speak=u=>{ window.__spoke.push(u.text); setTimeout(()=>u.onend&&u.onend(),5); };
+  try{ window.speechSynthesis.speak=u=>{ window.__spoke.push(u.text);
+        setTimeout(()=>{ u.onstart&&u.onstart(); u.onend&&u.onend(); },5); };
        window.speechSynthesis.cancel=()=>{}; }catch(e){}
 };
 

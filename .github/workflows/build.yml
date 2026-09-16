@@ -129,6 +129,14 @@ jobs:
       - name: the Japanese voice is ranked, and the robot never speaks
         run: node src/tests/voice_rank.js
 
+      # iOS lists voices it cannot actually speak with. Naming one produced
+      # silence on every card while the downloaded audio kept playing.
+      - name: a voice that cannot speak does not silence the app
+        run: node src/tests/phantom_voice.js
+
+      - name: audio, on both channels
+        run: node src/tests/audio.js
+
   deploy:
     needs: [build, test]
     runs-on: ubuntu-latest

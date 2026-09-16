@@ -32,7 +32,10 @@ await ctx.addInitScript(v=>{ window.__spoke=[]; window.__voice=[];
   try{Object.defineProperty(window.speechSynthesis,'getVoices',{value:()=>v});}catch(e){}
   window.SpeechSynthesisUtterance=function(t){this.text=t;this.rate=1;};
   try{ window.speechSynthesis.speak=u=>{ window.__spoke.push(u.text); window.__voice.push(u.voice?u.voice.name:null);
-        setTimeout(()=>u.onend&&u.onend(),5); };
+        /* onstart matters: the app now treats an utterance that never starts as a
+           voice that cannot speak, and retries it without one. A stub that stays
+           silent is indistinguishable from the fault this exists to catch. */
+        setTimeout(()=>{ u.onstart&&u.onstart(); u.onend&&u.onend(); },5); };
        window.speechSynthesis.cancel=()=>{}; }catch(e){}
 }, HIS);
 const p=await ctx.newPage(); const errs=[];
