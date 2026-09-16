@@ -123,6 +123,9 @@ jobs:
       - name: a bound counter is spoken in a real word
         run: node src/tests/say_check.js
 
+      - name: curriculum, content and the voice routing rules
+        run: node src/tests/content_round5.js
+
       # An iPhone's Japanese voice list can hold Eloquence, a formant
       # synthesiser from the 1980s, next to a 119 MB recorded voice. The old
       # code gave them equal turns. This asserts against his actual list.

@@ -1374,6 +1374,16 @@ function listenOn(){ return S.settings.listen!==false && (ttsReady() || audReady
 function listenWanted(){ return S.settings.listen!==false; }
 function listenBlocked(){ return listenWanted() && !ttsReady() && !audReady(); }
 function ttsReady(){ return TTS.ja; }
+/* His phone lists no Japanese voice at all and speaks correct Japanese anyway:
+   an utterance with lang ja-JP and no voice named is given one iOS keeps to
+   itself. The Settings test does exactly that and works, while every card was
+   sent to the downloaded library instead, because the card path asked whether a
+   Japanese voice was in the list rather than whether Japanese could be spoken.
+   Those are not the same question, and on this phone the answer to the first is
+   no and to the second is yes. The engine having produced a voice list at all
+   is what card audio now waits for; the library remains the fallback for a
+   phone with no speech engine, and the switch in Settings still forces it. */
+function ttsUsable(){ return ("speechSynthesis" in window) && (TTS.ja || TTS.seen); }
 /* WebKit hands out its voice list lazily. On an iPhone, and especially in a
    Home Screen web app, getVoices() can return an empty list, or an English-only
    list, until speech has actually been used inside a user gesture. The old
@@ -1721,16 +1731,20 @@ function speakCard(c, slow){
      "yeiiin" on every card, while the phone's own voice had been saying it
      correctly all along. The library stays where it is needed and nowhere
      else, and it is still the fallback for a phone with no Japanese voice. */
-  if(ttsReady() && S.settings.cardAudio!==true){
+  if(ttsUsable() && S.settings.cardAudio!==true){
     SAY_GEN++;
     slow ? speakSlow(say) : speak(say);
     return;
   }
-  /* The library was rendered from the bare kana, so a card with a spoken form
-     cannot use its clip: the clip is the isolated suffix this change exists to
-     stop playing. Those cards go to the device voice even in car mode, which on
-     CarPlay means silence rather than a wrong word. Twenty cards out of 1,812. */
-  var key=(c && c.say) ? null : clipFor(c);
+  /* A card with a spoken form would rather not use its clip, because the clip
+     was rendered from the bare kana and the bare kana is the thing this change
+     exists to stop playing. But only rather than. When the phone has no
+     Japanese voice at all, refusing the clip leaves nothing, and that is what
+     happened: his phone stopped reporting a Japanese voice, every other card
+     fell back to the library and played, and these twenty went silent. A
+     roughly said word beats no word, so the clip is skipped only while there
+     is a real voice available to say the fuller form instead. */
+  var key=(c && c.say && ttsUsable()) ? null : clipFor(c);
   if(key && audOn()){
     var g=++SAY_GEN;
     audStop();
@@ -2049,7 +2063,7 @@ function wireSpeak(c){
          One card taught two different pronunciations of its own word, and the
          wrong one sat directly beneath the right one. */
       var sx = (key.indexOf("sj:")===0) ? SIDX[key.slice(3)] : null;
-      if(sx && sx.kana && ttsReady() && S.settings.cardAudio!==true){ speak(sx.kana); return; }
+      if(sx && sx.kana && ttsUsable() && S.settings.cardAudio!==true){ speak(sx.kana); return; }
       if(!audOn()){ toast("Turn the downloaded voice on in Settings to hear examples"); return; }
       audPlay(key, 1, function(){ return g===SAY_GEN; }).then(function(ok){
         if(!ok && g===SAY_GEN) toast("That example has no recording yet");
@@ -3994,7 +4008,8 @@ function renderJaVoicePicker(){
   var now=document.getElementById("jaVoiceNow");
   if(now){
     var top=jaTop();
-    var label = !list.length ? "no Japanese voice on this phone"
+    var label = !list.length ? (ttsUsable() ? "whatever iOS picks for Japanese, which it does not list"
+                                            : "no Japanese voice on this phone")
       : (top.length>1 && S.settings.speechVary!==false && (S.settings.jaVoice||"auto")==="auto")
         ? top.map(function(v){ return jaLabel(v, list); }).join(", ")
         : jaLabel(jaVoice()||list[0], list);
@@ -4324,7 +4339,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
+      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, ttsUsable:ttsUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,

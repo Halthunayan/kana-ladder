@@ -83,16 +83,59 @@ const plain=await p.evaluate(async()=>{
 ok(plain.spoke[0]==='よん','yon is still read as yon, unchanged ('+JSON.stringify(plain.spoke)+')');
 ok(plain.untouched===1792,'1,792 of 1,812 cards are not affected at all ('+plain.untouched+')');
 
-console.log('\n4. even with no Japanese voice, a spoken-form card never plays the bare suffix');
+console.log('\n3b. his phone: no Japanese voice listed, but Japanese can still be spoken');
+/* The Settings test named no voice and spoke correct Japanese while every card
+   went to the downloaded library, because the card path asked whether a voice
+   was in the list rather than whether Japanese could be spoken. */
+const unlisted=await p.evaluate(async()=>{
+  const k=window.__kl;
+  const was=k.TTS.voices, wasJa=k.TTS.ja;
+  k.TTS.voices=[]; k.TTS.ja=false; k.TTS.seen=true;      // engine alive, nothing listed
+  k.AUD.log.length=0; window.__spoke=[];
+  k.speakCard(k.IDX['c0037']);
+  await new Promise(r=>setTimeout(r,500));
+  const r={spoke:window.__spoke.slice(), clips:k.AUD.log.map(x=>x.k), usable:k.ttsUsable()};
+  k.TTS.voices=was; k.TTS.ja=wasJa;
+  return r;
+});
+ok(unlisted.usable===true,'the app judges Japanese speakable when the engine is alive ('+unlisted.usable+')');
+ok(unlisted.spoke[0]==='\u3088\u3093','yon is spoken by the device, not sent to the library ('+JSON.stringify(unlisted.spoke)+')');
+ok(unlisted.clips.length===0,'and no clip is played ('+JSON.stringify(unlisted.clips)+')');
+
+console.log('\n4. with no speech engine at all, a counter card falls back to its clip rather than going silent');
+/* His phone stopped reporting any Japanese voice. Every other card fell back
+   to the downloaded library and played; these twenty had been forbidden their
+   clip so that the library could not say the bare suffix, and so they played
+   nothing at all. A roughly said word beats no word. */
 const noVoice=await p.evaluate(async()=>{
-  const k=window.__kl; const was=k.TTS.ja; k.TTS.ja=null;
+  const k=window.__kl; const was=k.TTS.ja, wasSeen=k.TTS.seen;
+  k.TTS.ja=null; k.TTS.seen=false;
   k.AUD.log.length=0; window.__spoke=[];
   k.speakCard(k.IDX['c1798']);
-  await new Promise(r=>setTimeout(r,600));
+  await new Promise(r=>setTimeout(r,800));
   const r={clips:k.AUD.log.map(x=>x.k), spoke:window.__spoke.slice()};
-  k.TTS.ja=was; return r;
+  k.TTS.ja=was; k.TTS.seen=wasSeen; return r;
 });
-ok(noVoice.clips.length===0,'the library is not reached for it in any configuration ('+JSON.stringify(noVoice.clips)+')');
+ok(noVoice.clips.length===1 && noVoice.clips[0]==='wj:c1798',
+   'the clip is played, so the card is not silent ('+JSON.stringify(noVoice.clips)+')');
+const withVoice=await p.evaluate(async()=>{
+  const k=window.__kl; k.AUD.log.length=0; window.__spoke=[];
+  k.speakCard(k.IDX['c1798']);
+  await new Promise(r=>setTimeout(r,500));
+  return {clips:k.AUD.log.map(x=>x.k), spoke:window.__spoke.slice()};
+});
+ok(withVoice.clips.length===0,'and while a voice exists the clip is still refused ('+JSON.stringify(withVoice.clips)+')');
+ok(withVoice.spoke[0]==='\u3054\u3075\u3093\u3067\u3059','the fuller form being preferred instead ('+JSON.stringify(withVoice.spoke)+')');
+const plainNoVoice=await p.evaluate(async()=>{
+  const k=window.__kl; const was=k.TTS.ja, wasSeen=k.TTS.seen;
+  k.TTS.ja=null; k.TTS.seen=false;
+  k.AUD.log.length=0; window.__spoke=[];
+  k.speakCard(k.IDX['c0037']);
+  await new Promise(r=>setTimeout(r,800));
+  const r={clips:k.AUD.log.map(x=>x.k)};
+  k.TTS.ja=was; k.TTS.seen=wasSeen; return r;
+});
+ok(plainNoVoice.clips.length===1,'an ordinary card behaves the same way, as it always did ('+JSON.stringify(plainNoVoice.clips)+')');
 
 console.log('\n5. the spoken form is shown to the reader, and only where it is not the answer');
 const html=await p.evaluate(()=>{
