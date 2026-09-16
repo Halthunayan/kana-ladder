@@ -357,6 +357,14 @@
       <button class="btn btn-ghost" id="audTest">Play</button>
     </div>
     <div class="opt">
+      <div><div class="t">Japanese voice</div><div class="d">The voice that reads every card. Safari hands out a subset of the voices iOS has, and that subset can include Eloquence, a formant synthesiser from the 1980s, alongside a real recorded voice. Best available picks the highest quality one and never the robot. If Kyoko (Enhanced) has finished downloading on your phone and appears in this list, choose it: the plain Kyoko is a compressed voice and the first thing that compression loses is a quiet sound, which in Japanese is fu. Now using <b id="jaVoiceNow">&mdash;</b>.</div></div>
+      <select id="setJaVoice"><option value="auto">Best available</option></select>
+    </div>
+    <div class="opt">
+      <div><div class="t">Hear it</div><div class="d">Plays gofun, five minutes, in the chosen Japanese voice. Listen for the f at the start of the second half.</div></div>
+      <button class="btn btn-ghost" id="jaVoiceTest">Test</button>
+    </div>
+    <div class="opt">
       <div><div class="t">English voice</div><div class="d">Only used as the fallback, when the downloaded voice is off or missing. Safari offers a subset of the voices iOS has, and on many devices the English half of it is robotic. Pick whichever sounds human. Now using <b id="enVoiceNow">&mdash;</b>.</div></div>
       <select id="setEnVoice"><option value="auto">Best available</option></select>
     </div>

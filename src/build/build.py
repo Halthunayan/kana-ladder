@@ -170,6 +170,32 @@ for _e in _d:
             'the written example for %s does not read as its romaji: %s / %s' % (_e['id'], _v[0], _v[1])
         # the phone never shows the kana, so it never has to carry it
         _page_ex[_e['id']] = [_v[1], _v[2]]
+# ---- guard: the spoken form of a bound counter ----
+# A counter is a suffix. Spoken alone it is not Japanese, and the voice returns
+# something no native says: fun arrived as "un". Those cards carry a say form,
+# the smallest real word containing the suffix. Three things must hold or the
+# card teaches a different word from the one on its face: the say form must
+# actually contain the card's kana, it must read as its own romaji, and it must
+# come with a gloss, because it is shown to a reader who cannot read kana.
+_say_n = 0
+for _e in _d:
+    if not _e.get('say'):
+        assert not _e.get('sayR') and not _e.get('sayE'), \
+            '%s has a spoken gloss but no spoken form' % _e['id']
+        continue
+    assert _e.get('sayR') and _e.get('sayE'), \
+        'the spoken form of %s needs both romaji and an English gloss' % _e['id']
+    assert _e['kana'] in _e['say'], \
+        'the spoken form of %s (%s) does not contain the card itself (%s)' \
+        % (_e['id'], _e['say'], _e['kana'])
+    assert _e['say'] != _e['kana'], \
+        'the spoken form of %s is just the card again' % _e['id']
+    assert _K.check(_e['say'], _e['sayR'])[0] == 'OK', \
+        'the spoken form of %s does not read as its romaji: %s / %s' \
+        % (_e['id'], _e['say'], _e['sayR'])
+    _say_n += 1
+print('spoken forms: %d bound counters given a real word to be said in' % _say_n)
+
 examples = _j.dumps(_page_ex, ensure_ascii=False, separators=(',', ':'))
 print('examples: %d words, %d pointing at a deck sentence, %d written inline'
       % (len(_page_ex), sum(1 for _v in _page_ex.values() if isinstance(_v, str)),

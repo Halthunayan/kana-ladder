@@ -516,3 +516,15 @@ button.drill:active{transform:scale(.98);background:var(--paper-2)}
 .checkbody .btn{width:100%}
 .checkbody .opts{display:flex;flex-direction:column;gap:8px;margin-top:14px}
 .cloze-rm{font:400 15px/1.5 var(--font-ui);color:var(--ink-3);text-align:center;margin-top:8px}
+
+/* the spoken form of a bound counter: shown under the answer only, because on
+   an English to Japanese card it would otherwise be the answer itself */
+.saybox{margin:8px auto 0;padding:8px 12px;border:1px solid var(--rule);border-radius:10px;
+  background:var(--paper-2);display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;
+  text-align:left;width:100%;max-width:min(31ch,100%)}
+.say-lab{font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ai);opacity:.85}
+.say-r{font-weight:600}
+.say-e{opacity:.72;font-size:.9rem}
+.say-play{appearance:none;border:0;background:none;padding:0;line-height:0;cursor:pointer;
+  color:var(--ai);margin-left:auto;align-self:center}
+.say-play svg{width:17px;height:17px}

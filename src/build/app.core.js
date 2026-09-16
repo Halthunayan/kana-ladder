@@ -48,7 +48,7 @@ var CONJ_GATE=3;   // days of interval a word must hold before its forms are dri
 function isSent(c){ return c && c.t==="s"; }
 
 var LEARN = [60, 600], RELEARN = [600], SHARDS = 8, LS_KEY = "kanaladder.v1";
-var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto"};
+var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto"};
 
 var S = {rev:0, items:{}, settings:Object.assign({},DEFAULTS),
   daily:{key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,noNew:false,buried:{},done:{},missed:{}}, hist:{}, streak:{cur:0,best:0,last:""}, life:{ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{}, checks:[], log:[]};
@@ -1430,10 +1430,51 @@ function ttsProbe(){
    than one Japanese voice they are rotated. speakSlow is the deliberate escape
    hatch: same word, clearly slower, for when the normal speed did not land. */
 var VOICE_N=0;
+/* The English side was given a ranking because rotating blind produced robots.
+   The Japanese side was left rotating blind, which was an oversight and not a
+   small one: an iPhone's Japanese list can hold Eloquence, a formant
+   synthesiser from the 1980s, next to Kyoko Enhanced, a 119 MB recorded voice,
+   and the old code gave them equal turns. It also gave a compact voice equal
+   turns with its own enhanced version, and a compact voice loses the quietest
+   sound first, which in Japanese is fu. Same shape as enScore, applied to the
+   language the app is actually teaching. */
+var JA_ROBOT=["eloquence","grandma","grandpa","reed","rocko","sandy","shelley","flo","eddy",
+  "glen","bells","boing","bubbles","cellos","jester","organ","trinoids","whisper","wobble",
+  "zarvox","albert","bad news","good news","superstar","deranged","hysterical"];
+var JA_GOOD=["kyoko","o-ren","oren","otoya","hattori","siri"];
+function jaScore(v){
+  var n=(v.name||"").toLowerCase(), sc=0, i;
+  for(i=0;i<JA_ROBOT.length;i++) if(n.indexOf(JA_ROBOT[i])>=0) sc-=100;
+  if(/enhanced|premium/.test(n)) sc+=40;
+  if(/compact/.test(n)) sc-=20;
+  for(i=0;i<JA_GOOD.length;i++) if(n.indexOf(JA_GOOD[i])>=0){ sc+=20; break; }
+  if(v.localService) sc+=2;
+  if(v.default) sc+=1;
+  return sc;
+}
+function jaRanked(){
+  var v=(TTS.voices||[]).slice();
+  v.sort(function(a,b){ var d=jaScore(b)-jaScore(a);
+    return d!==0 ? d : String(a.name||"").localeCompare(String(b.name||"")); });
+  return v;
+}
+/* Variety is still worth having, but only among voices that are all good. The
+   rotation now runs across the top tier and never reaches down into it. */
+function jaTop(){
+  var r=jaRanked(); if(!r.length) return [];
+  var best=jaScore(r[0]);
+  return r.filter(function(x){ return jaScore(x)>=best-5; });
+}
 function jaVoice(){
-  var v=TTS.voices||[];
-  if(v.length<2) return v[0]||null;
-  return v[(VOICE_N++) % v.length];
+  var want=S.settings.jaVoice, list=TTS.voices||[], i;
+  if(want && want!=="auto"){
+    for(i=0;i<list.length;i++) if(list[i].name===want){ TTS.last=list[i].name; return list[i]; }
+  }
+  var top=jaTop();
+  if(!top.length){ TTS.last=(list[0]&&list[0].name)||null; return list[0]||null; }
+  var pick = (top.length<2 || S.settings.speechVary===false) ? top[0] : top[(VOICE_N++) % top.length];
+  TTS.last=pick.name||null;
+  return pick;
 }
 /* Safari hands out only a subset of the voices iOS actually has, and on many
    devices the English half of that subset is the Eloquence family: a formant
@@ -1493,9 +1534,22 @@ function speakAt(text, rate, fixedVoice){
 /* A clip if there is one, the device voice otherwise. speakCard is what every
    card now calls, so the listening card and the audio question are heard in
    the same voice the car uses instead of whatever the phone happens to have. */
+/* Small ya, yu and yo ride on the mora before them; everything else, the small
+   tsu and the n included, is its own beat. */
+function moraCount(t){
+  t=String(t||""); var n=0;
+  for(var i=0;i<t.length;i++) if("\u3083\u3085\u3087\u30e3\u30e5\u30e7".indexOf(t.charAt(i))<0) n++;
+  return n;
+}
 function speak(text){
   var base=S.settings.speechRate||0.85;
-  var jitter=(S.settings.speechVary===false) ? 0 : (Math.random()*0.24-0.12);
+  /* The jitter is there so a word is learned as a word and not as one
+     recording. On two morae there is nothing for it to vary and plenty to
+     ruin: a random slowdown to 0.73 stretches the word past Japanese mora
+     timing and smears the one consonant that was already hardest to hear.
+     Slowing yon down is what made yon worse. Below three morae the word is
+     spoken at the rate he set, every time. */
+  var jitter=(S.settings.speechVary===false || moraCount(text)<3) ? 0 : (Math.random()*0.24-0.12);
   speakAt(text, base+jitter, false);
 }
 function clipFor(c){
@@ -1511,10 +1565,19 @@ function clipFor(c){
    on an English to Japanese card that is the answer read aloud. It could not
    happen while nothing in study mode ever reached a clip; it can now. */
 var SAY_GEN=0;
+/* A counter is a suffix, not a word. Nobody says fun, ji, ko or do standing on
+   its own, and a voice asked to read one alone produces something no Japanese
+   person ever utters: fun came back sounding like "un" because an isolated fu
+   has nothing after it to lean on. The card still teaches the suffix, because
+   that is the thing worth knowing, but it is spoken in the smallest real form
+   that contains it: gofun, ikko, sanjuudo. The card says so underneath, so the
+   audio and the kana are never seen to disagree. */
+function sayTextOf(c){ return (c && c.say) ? c.say : (c ? c.kana : ""); }
 function speakCard(c, slow){
   if(!c) return;
   var base=S.settings.speechRate||0.85;
   var rate = slow ? Math.max(0.4, base-0.30) : base;
+  var say=sayTextOf(c);
   /* The phone's own Japanese voice reads the card. The pre-rendered library
      exists for one reason: iOS will not route Web Speech to CarPlay. That is a
      car mode problem and only a car mode problem. Routing study cards through
@@ -1525,20 +1588,24 @@ function speakCard(c, slow){
      else, and it is still the fallback for a phone with no Japanese voice. */
   if(ttsReady() && S.settings.cardAudio!==true){
     SAY_GEN++;
-    slow ? speakSlow(c.kana) : speak(c.kana);
+    slow ? speakSlow(say) : speak(say);
     return;
   }
-  var key=clipFor(c);
+  /* The library was rendered from the bare kana, so a card with a spoken form
+     cannot use its clip: the clip is the isolated suffix this change exists to
+     stop playing. Those cards go to the device voice even in car mode, which on
+     CarPlay means silence rather than a wrong word. Twenty cards out of 1,812. */
+  var key=(c && c.say) ? null : clipFor(c);
   if(key && audOn()){
     var g=++SAY_GEN;
     audStop();
     audPlay(key, clamp(rate/0.85,0.5,1.6), function(){ return g===SAY_GEN; }).then(function(ok){
-      if(!ok && g===SAY_GEN){ slow ? speakSlow(c.kana) : speak(c.kana); }
+      if(!ok && g===SAY_GEN){ slow ? speakSlow(say) : speak(say); }
     });
     return;
   }
   SAY_GEN++;
-  slow ? speakSlow(c.kana) : speak(c.kana);
+  slow ? speakSlow(say) : speak(say);
 }
 function speakSlow(text){ speakAt(text, Math.max(0.4,(S.settings.speechRate||0.85)-0.30), true); }
 function jpBlockHtml(c){
@@ -1600,6 +1667,17 @@ function exHtml(c){
   return '<div class="ex-box"><div class="ex-head"><span class="ex-lab">example</span>'+play+'</div>'+
     '<div class="ex-r">'+esc(e.romaji)+'</div>'+
     '<div class="ex-e">'+esc(e.en)+'</div></div>';
+}
+/* The voice says gofun while the card shows fun, which looks like a fault
+   unless the card says why. Back only: on an English to Japanese card the
+   spoken form is the answer, and on a Japanese to English card its gloss is
+   half the answer. */
+function sayHtml(c){
+  if(!c || !c.say || !c.sayR) return "";
+  return '<div class="saybox"><span class="say-lab">spoken as</span>'+
+    '<span class="say-r">'+esc(c.sayR)+'</span>'+
+    (c.sayE ? '<span class="say-e">'+esc(c.sayE)+'</span>' : "")+
+    '<button class="say-play" data-speak="1" aria-label="Read the spoken form aloud">'+SPK+'</button></div>';
 }
 function noteHtml(c){
   var n=S.notes[c.id];
@@ -1761,7 +1839,7 @@ function renderCard(){
       '<div class="hint">What did you hear?<br><span class="sub2">tap to play again</span></div>'+
       '<button class="slowbtn" data-slow="1">Play it slower</button>';
     back.innerHTML = jpBlockHtml(c) +
-      '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+      '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + sayHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else if(isConj(c)){
     var ruleHtml = c.rule ? '<div class="conj-rule">'+esc(c.rule)+'</div>' : "";
     front.innerHTML =
@@ -1774,12 +1852,12 @@ function renderCard(){
   } else if(d==="j"){
     front.innerHTML = jpBlockHtml(c) +
       '<div class="hint">'+(Sess.focus?"From memory: what does this mean?":"What does this mean?")+'</div>';
-    back.innerHTML = '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    back.innerHTML = '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + sayHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else {
     front.innerHTML = '<div class="english">'+esc(c.en)+'</div>'+
       '<div class="hint">Say it in Japanese</div>'+
       (S.settings.typing ? '<div class="typebox"><input id="typeIn" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="romaji"></div><div class="verdict" id="verdict"></div>' : "");
-    back.innerHTML = jpBlockHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    back.innerHTML = jpBlockHtml(c) + sayHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   }
   wireSpeak(c);
   wireLeech(c,k);
@@ -1828,9 +1906,16 @@ function wireSpeak(c){
     b.addEventListener("click",function(e){
       e.stopPropagation();
       var key=b.getAttribute("data-ex-key");
-      if(!audOn()){ toast("Turn the downloaded voice on in Settings to hear examples"); return; }
       var g=++SAY_GEN;
       audStop();
+      /* The word on this card is read by the phone's own voice, so the example
+         under it has to be read by the same voice. It was not: the example went
+         to the downloaded library, which is the one that cannot pronounce fu.
+         One card taught two different pronunciations of its own word, and the
+         wrong one sat directly beneath the right one. */
+      var sx = (key.indexOf("sj:")===0) ? SIDX[key.slice(3)] : null;
+      if(sx && sx.kana && ttsReady() && S.settings.cardAudio!==true){ speak(sx.kana); return; }
+      if(!audOn()){ toast("Turn the downloaded voice on in Settings to hear examples"); return; }
       audPlay(key, 1, function(){ return g===SAY_GEN; }).then(function(ok){
         if(!ok && g===SAY_GEN) toast("That example has no recording yet");
       });
@@ -3746,7 +3831,33 @@ function audDownload(){
     toast("The download did not finish");
   });
 }
+/* He could not tell which voice was speaking, and neither could I. That is the
+   whole reason a wrong pronunciation went three rounds before anyone looked at
+   the voice list. The name of the voice now sits on screen. */
+function renderJaVoicePicker(){
+  var sel=document.getElementById("setJaVoice"); if(!sel) return;
+  var list=jaRanked(), cur=S.settings.jaVoice||"auto", html="", i;
+  html+='<option value="auto">Best available</option>';
+  for(i=0;i<list.length;i++){
+    var nm=list[i].name||("voice "+(i+1));
+    html+='<option value="'+esc(nm)+'">'+esc(nm)+'</option>';
+  }
+  sel.innerHTML=html;
+  var found=(cur==="auto");
+  if(!found) for(i=0;i<list.length;i++) if(list[i].name===cur) found=true;
+  sel.value = found ? cur : "auto";
+  var now=document.getElementById("jaVoiceNow");
+  if(now){
+    var top=jaTop();
+    var label = !list.length ? "no Japanese voice on this phone"
+      : (top.length>1 && S.settings.speechVary!==false && (S.settings.jaVoice||"auto")==="auto")
+        ? top.map(function(v){return v.name;}).join(", ")
+        : ((jaVoice()||{}).name || "\u2014");
+    now.textContent=label;
+  }
+}
 function renderEnVoicePicker(){
+  renderJaVoicePicker();
   var sel=document.getElementById("setEnVoice"); if(!sel) return;
   var list=enRanked(), cur=S.settings.enVoice||"auto", html="";
   html+='<option value="auto">Best available</option>';
@@ -3817,6 +3928,12 @@ function bindSettings(){
       });
     });
   });
+  document.getElementById("setJaVoice").addEventListener("change",function(){
+    S.settings.jaVoice=this.value; save(); renderJaVoicePicker();
+    speakAt("\u3054\u3075\u3093", S.settings.speechRate||0.85, false); });
+  document.getElementById("jaVoiceTest").addEventListener("click",function(){
+    renderJaVoicePicker();
+    speakAt("\u3054\u3075\u3093", S.settings.speechRate||0.85, false); });
   document.getElementById("setEnVoice").addEventListener("change",function(){
     S.settings.enVoice=this.value; save(); renderEnVoicePicker();
     carSay("This is how the English side will sound.","en",1.0); });
@@ -4050,9 +4167,9 @@ if("serviceWorker" in navigator){
       CAR:CAR, carWords:carWords, carStart:carStart, carBegin:carBegin, carPick:carPick,
       carAdvance:carAdvance, carSkip:carSkip, carRepeat:carRepeat, carPause:carPause,
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
-      carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
+      carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      enVoice:enVoice, enRanked:enRanked, enScore:enScore,
+      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,

@@ -118,6 +118,17 @@ jobs:
       - name: every word card carries a worked example
         run: PORT=8100 node src/tests/examples_check.js
 
+      # A counter is a suffix. Spoken alone it is not Japanese, and the phone
+      # returned something no native says: fun arrived sounding like "un".
+      - name: a bound counter is spoken in a real word
+        run: node src/tests/say_check.js
+
+      # An iPhone's Japanese voice list can hold Eloquence, a formant
+      # synthesiser from the 1980s, next to a 119 MB recorded voice. The old
+      # code gave them equal turns. This asserts against his actual list.
+      - name: the Japanese voice is ranked, and the robot never speaks
+        run: node src/tests/voice_rank.js
+
   deploy:
     needs: [build, test]
     runs-on: ubuntu-latest
