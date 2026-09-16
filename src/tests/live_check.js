@@ -49,6 +49,29 @@ ok(aud.ok===true, 'the audio manifest is served ('+(aud.sprites||0)+' sprites)')
 ok(aud.idxOk && aud.mp3Ok, 'a sprite and its clip index both download ('+aud.sprite+')');
 ok(aud.clips>0 && aud.bytes>100000, aud.clips+' clips in '+Math.round((aud.bytes||0)/1024)+' KB');
 
+/* Publishing is not the same as being published. The manifest names 26 sprite
+   files; a deploy that carried the manifest but not all of the files it names
+   leaves the phone deleting the audio it has and failing to replace it. Every
+   name is fetched, not just the one the app happens to ask for first. */
+const every=await p.evaluate(async(base)=>{
+  const m=await (await fetch(base+'audio/v1/manifest.json',{cache:'no-store'})).json();
+  const names=Object.values(m.files||{});
+  let missing=[], bytes=0;
+  for(const b of names){
+    for(const ext of ['.mp3','.json']){
+      const r=await fetch(base+'audio/v1/'+b+ext,{method:'GET'});
+      if(!r.ok){ missing.push(b+ext); continue; }
+      const buf=await r.arrayBuffer();
+      if(!buf.byteLength) missing.push(b+ext+' (empty)');
+      bytes+=buf.byteLength;
+    }
+  }
+  return {n:names.length, missing, mb:Math.round(bytes/1048576)};
+}, BASE);
+ok(every.missing.length===0,
+   'every one of the '+every.n+' sprites the manifest names is actually served, '+every.mb+' MB in all'
+   +(every.missing.length?' (missing: '+every.missing.slice(0,4).join(', ')+')':''));
+
 console.log('\n3. the service worker installs and the app works offline');
 await p.waitForFunction(()=>!!navigator.serviceWorker.controller, null, {timeout:30000}).catch(()=>{});
 ok(await p.evaluate(()=>!!navigator.serviceWorker.controller), 'the service worker took control');
