@@ -42,14 +42,16 @@ const set=await p.evaluate(()=>{
           nogloss:said.filter(c=>!c.sayR||!c.sayE).map(c=>c.id),
           same:said.filter(c=>c.say===c.kana).map(c=>c.id),
           fun:k.IDX['c1798'].say, funR:k.IDX['c1798'].sayR, funE:k.IDX['c1798'].sayE,
-          nonCounter:said.filter(c=>c.pos!=='counter').map(c=>c.id)};
+          nonCounter:said.filter(c=>c.pos!=='counter').map(c=>c.id),
+          nfinal:said.filter(c=>/\u3093$/.test(c.say)).map(c=>c.id+':'+c.sayR)};
 });
 ok(set.n===20,'20 bound counters carry a spoken form ('+set.n+')');
 ok(set.bad.length===0,'every spoken form contains the card it is for ('+JSON.stringify(set.bad)+')');
 ok(set.nogloss.length===0,'and comes with romaji and an English gloss, since he cannot read kana');
 ok(set.same.length===0,'and is a different word from the bare suffix');
 ok(set.nonCounter.length===0,'only counters were touched ('+JSON.stringify(set.nonCounter)+')');
-ok(set.funR==='gofun' && set.funE==='five minutes','fun is spoken as gofun, five minutes ('+set.funR+', '+set.funE+')');
+ok(set.funR==='gofun desu','fun is spoken as gofun desu ('+set.funR+')');
+ok(set.nfinal.length===0,'no spoken form ends in n, where the device voice releases the nasal into a vowel and gofun came back as "go-fun-o" ('+JSON.stringify(set.nfinal)+')');
 
 console.log('\n2. the voice says the real word, not the bare suffix');
 const spoke=await p.evaluate(async()=>{
@@ -62,7 +64,7 @@ const spoke=await p.evaluate(async()=>{
   }
   return out;
 });
-ok(spoke.c1798.spoke[0]==='ごふん','the minute counter is read as gofun ('+JSON.stringify(spoke.c1798.spoke)+')');
+ok(spoke.c1798.spoke[0]==='ごふんです','the minute counter is read as gofun desu, ending on a vowel ('+JSON.stringify(spoke.c1798.spoke)+')');
 ok(spoke.c1421.spoke[0]==='いっこ','the small-object counter is read as ikko ('+JSON.stringify(spoke.c1421.spoke)+')');
 ok(spoke.c1425.spoke[0]==='さんじゅうど','the degree counter is read as sanjuudo ('+JSON.stringify(spoke.c1425.spoke)+')');
 ok(spoke.c1797.spoke[0]==='いちじ','the hour counter is read as ichiji ('+JSON.stringify(spoke.c1797.spoke)+')');
@@ -97,7 +99,7 @@ const html=await p.evaluate(()=>{
   const fun=k.sayHtml(k.IDX['c1798']);
   const plain=k.sayHtml(k.IDX['c0037']);
   return {fun:fun, plain:plain,
-          hasR:fun.indexOf('gofun')>=0, hasE:fun.indexOf('five minutes')>=0,
+          hasR:fun.indexOf('gofun desu')>=0, hasE:fun.indexOf('five minutes')>=0,
           hasKana:/[぀-ヿ一-鿿]/.test(fun.replace(/aria-label="[^"]*"/g,''))};
 });
 ok(html.hasR && html.hasE,'the block names the spoken form in romaji and English');

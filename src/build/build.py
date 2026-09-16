@@ -190,9 +190,17 @@ for _e in _d:
         % (_e['id'], _e['say'], _e['kana'])
     assert _e['say'] != _e['kana'], \
         'the spoken form of %s is just the card again' % _e['id']
-    assert _K.check(_e['say'], _e['sayR'])[0] == 'OK', \
+    assert _K.check_sentence(_e['say'], _e['sayR']), \
         'the spoken form of %s does not read as its romaji: %s / %s' \
         % (_e['id'], _e['say'], _e['sayR'])
+    # A word ending in n is where the phone's voice is least reliable: it
+    # releases the nasal into an audible vowel, so gofun came back as
+    # "go-fun-o". Every spoken form ends on a real vowel instead, which is
+    # also how the counter is actually heard in a sentence.
+    assert not _e['say'].endswith('\u3093'), \
+        ('the spoken form of %s (%s) ends in n, which the device voice renders '
+         'with a trailing vowel; put it in a phrase that ends on a vowel'
+         % (_e['id'], _e['say']))
     _say_n += 1
 print('spoken forms: %d bound counters given a real word to be said in' % _say_n)
 

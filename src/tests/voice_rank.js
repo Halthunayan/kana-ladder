@@ -120,7 +120,57 @@ const jit=await p.evaluate(async()=>{
 ok(jit.short.length===1,'yon is spoken at one fixed rate every time ('+JSON.stringify(jit.short)+')');
 ok(jit.long.length>1,'gofun, being three morae, still varies ('+jit.long.length+' distinct rates)');
 
-console.log('\n6. no page errors');
+console.log('\n6. two voices called Kyoko, which is what his phone actually reports');
+/* Downloading Kyoko Enhanced did not add "Kyoko (Enhanced)" to Safari's list.
+   It added a second voice also called "Kyoko". The first ranking scored them
+   the same, rotated between them, and printed "Now using Kyoko, Kyoko". */
+const dup=await p.evaluate(async()=>{
+  const k=window.__kl;
+  k.TTS.voices=[
+    {name:'Eloquence',lang:'ja-JP',voiceURI:'com.apple.eloquence.ja-JP.Eloquence',localService:true},
+    {name:'Kyoko',lang:'ja-JP',voiceURI:'com.apple.voice.compact.ja-JP.Kyoko',localService:true,default:true},
+    {name:'Kyoko',lang:'ja-JP',voiceURI:'com.apple.voice.enhanced.ja-JP.Kyoko',localService:true},
+    {name:'O-ren',lang:'ja-JP',voiceURI:'com.apple.voice.compact.ja-JP.Oren',localService:true}];
+  const list=k.jaRanked();
+  const top=k.jaTop();
+  k.S.settings.jaVoice='auto'; window.__voice=[];
+  for(let i=0;i<6;i++){ k.speakCard(k.IDX['c0037']); await new Promise(r=>setTimeout(r,50)); }
+  const used=[...new Set(window.__voice)];
+  const uris=[];
+  for(let i=0;i<6;i++){ const v=k.jaVoice(); uris.push(v.voiceURI); }
+  return {labels:list.map(v=>k.jaLabel(v,list)), top:top.length,
+          topLabel:top.map(v=>k.jaLabel(v,list)), used:used, uris:[...new Set(uris)]};
+});
+ok(dup.labels[0]==='Kyoko \u00b7 enhanced','the enhanced Kyoko is identified from its identifier and ranks first ('+dup.labels[0]+')');
+ok(dup.labels.filter(x=>x==='Kyoko').length===0,'neither Kyoko is left ambiguously labelled ('+JSON.stringify(dup.labels)+')');
+ok(dup.top===1,'the rotation pool holds one voice per name, not two Kyokos ('+JSON.stringify(dup.topLabel)+')');
+ok(dup.uris.length===1 && dup.uris[0].indexOf('enhanced')>=0,
+   'every card is read by the enhanced one, never the compact ('+JSON.stringify(dup.uris)+')');
+
+console.log('\n6b. pinning works when two voices share a name');
+const pin=await p.evaluate(async()=>{
+  const k=window.__kl;
+  k.S.settings.jaVoice='com.apple.voice.compact.ja-JP.Kyoko';
+  const got=[]; for(let i=0;i<4;i++) got.push(k.jaVoice().voiceURI);
+  k.S.settings.jaVoice='auto';
+  return [...new Set(got)];
+});
+ok(pin.length===1 && pin[0].indexOf('compact')>=0,
+   'choosing the compact Kyoko by identifier actually pins that one ('+JSON.stringify(pin)+')');
+
+console.log('\n6c. an identifier that says nothing still yields a stable, distinguishable list');
+const opaque=await p.evaluate(async()=>{
+  const k=window.__kl;
+  k.TTS.voices=[{name:'Kyoko',lang:'ja-JP',voiceURI:'urn:voice:aaa111'},
+                {name:'Kyoko',lang:'ja-JP',voiceURI:'urn:voice:bbb222'}];
+  const list=k.jaRanked();
+  const got=[]; for(let i=0;i<5;i++) got.push(k.jaVoice().voiceURI);
+  return {labels:list.map(v=>k.jaLabel(v,list)), used:[...new Set(got)]};
+});
+ok(opaque.labels[0]!==opaque.labels[1],'the two are still told apart in the list ('+JSON.stringify(opaque.labels)+')');
+ok(opaque.used.length===1,'and one of them is chosen consistently, not alternated ('+JSON.stringify(opaque.used)+')');
+
+console.log('\n7. no page errors');
 ok(errs.length===0,'the app ran clean'+(errs.length?': '+errs[0]:''));
 await b.close();
 console.log(fails.length? '\n'+fails.length+' FAILED:\n  '+fails.join('\n  ') : '\nall checks passed');

@@ -1442,15 +1442,40 @@ var JA_ROBOT=["eloquence","grandma","grandpa","reed","rocko","sandy","shelley","
   "glen","bells","boing","bubbles","cellos","jester","organ","trinoids","whisper","wobble",
   "zarvox","albert","bad news","good news","superstar","deranged","hysterical"];
 var JA_GOOD=["kyoko","o-ren","oren","otoya","hattori","siri"];
+/* Safari does not put the quality in the name. Downloading Kyoko Enhanced put
+   a second voice in the list also called "Kyoko", and the first version of
+   this ranking scored them identically, rotated between them, and printed
+   "Now using Kyoko, Kyoko" in Settings. The identifier is the only field that
+   can carry the difference, so both are read; if it does not carry it either,
+   nothing is lost, because the tie is broken below instead of guessed at. */
+function vId(v){ return (v && (v.voiceURI || v.name)) || ""; }
+function vText(v){ return ((v&&v.name)||"")+" "+vId(v); }
 function jaScore(v){
-  var n=(v.name||"").toLowerCase(), sc=0, i;
+  var n=vText(v).toLowerCase(), sc=0, i;
   for(i=0;i<JA_ROBOT.length;i++) if(n.indexOf(JA_ROBOT[i])>=0) sc-=100;
-  if(/enhanced|premium/.test(n)) sc+=40;
+  if(/enhanced|premium|neural/.test(n)) sc+=40;
   if(/compact/.test(n)) sc-=20;
   for(i=0;i<JA_GOOD.length;i++) if(n.indexOf(JA_GOOD[i])>=0){ sc+=20; break; }
   if(v.localService) sc+=2;
   if(v.default) sc+=1;
   return sc;
+}
+/* What to show next to a name when two voices share it. The identifier usually
+   says which is which; when it does not, its tail is still unique and is shown
+   rather than a guess, so the list can be told apart by eye and by ear. */
+function jaQuality(v){
+  var t=vText(v).toLowerCase();
+  if(/premium/.test(t)) return "premium";
+  if(/enhanced/.test(t)) return "enhanced";
+  if(/neural/.test(t)) return "neural";
+  if(/compact/.test(t)) return "compact";
+  var id=vId(v), cut=id.lastIndexOf(".");
+  return cut>0 ? id.slice(cut+1) : id.slice(-12);
+}
+function jaLabel(v, list){
+  var nm=(v&&v.name)||"voice", dup=0, i;
+  for(i=0;i<list.length;i++) if(((list[i].name)||"")===nm) dup++;
+  return dup>1 ? nm+" \u00b7 "+jaQuality(v) : nm;
 }
 function jaRanked(){
   var v=(TTS.voices||[]).slice();
@@ -1460,20 +1485,35 @@ function jaRanked(){
 }
 /* Variety is still worth having, but only among voices that are all good. The
    rotation now runs across the top tier and never reaches down into it. */
+/* One voice per name in the rotation. Two entries called Kyoko are a compact
+   voice and a 119 MB recorded one, and alternating between them means half the
+   cards are read by the worse of the two at random. Ranked order already puts
+   the better one first where the identifier says so; where it does not, taking
+   the first is still a fixed choice rather than a coin flip, and the picker is
+   there to override it by ear. */
 function jaTop(){
   var r=jaRanked(); if(!r.length) return [];
-  var best=jaScore(r[0]);
-  return r.filter(function(x){ return jaScore(x)>=best-5; });
+  var best=jaScore(r[0]), out=[], seen={}, i, nm;
+  for(i=0;i<r.length;i++){
+    if(jaScore(r[i])<best-5) break;
+    nm=(r[i].name||"")+"";
+    if(seen[nm]) continue;
+    seen[nm]=1; out.push(r[i]);
+  }
+  return out;
 }
 function jaVoice(){
   var want=S.settings.jaVoice, list=TTS.voices||[], i;
+  /* pinned by identifier, not by name: two voices share the name Kyoko, so a
+     name would have pinned whichever happened to be first */
   if(want && want!=="auto"){
-    for(i=0;i<list.length;i++) if(list[i].name===want){ TTS.last=list[i].name; return list[i]; }
+    for(i=0;i<list.length;i++) if(vId(list[i])===want){ TTS.last=list[i]; return list[i]; }
+    for(i=0;i<list.length;i++) if(list[i].name===want){ TTS.last=list[i]; return list[i]; }
   }
   var top=jaTop();
-  if(!top.length){ TTS.last=(list[0]&&list[0].name)||null; return list[0]||null; }
+  if(!top.length){ TTS.last=list[0]||null; return list[0]||null; }
   var pick = (top.length<2 || S.settings.speechVary===false) ? top[0] : top[(VOICE_N++) % top.length];
-  TTS.last=pick.name||null;
+  TTS.last=pick;
   return pick;
 }
 /* Safari hands out only a subset of the voices iOS actually has, and on many
@@ -3839,20 +3879,19 @@ function renderJaVoicePicker(){
   var list=jaRanked(), cur=S.settings.jaVoice||"auto", html="", i;
   html+='<option value="auto">Best available</option>';
   for(i=0;i<list.length;i++){
-    var nm=list[i].name||("voice "+(i+1));
-    html+='<option value="'+esc(nm)+'">'+esc(nm)+'</option>';
+    html+='<option value="'+esc(vId(list[i]))+'">'+esc(jaLabel(list[i], list))+'</option>';
   }
   sel.innerHTML=html;
   var found=(cur==="auto");
-  if(!found) for(i=0;i<list.length;i++) if(list[i].name===cur) found=true;
+  if(!found) for(i=0;i<list.length;i++) if(vId(list[i])===cur) found=true;
   sel.value = found ? cur : "auto";
   var now=document.getElementById("jaVoiceNow");
   if(now){
     var top=jaTop();
     var label = !list.length ? "no Japanese voice on this phone"
       : (top.length>1 && S.settings.speechVary!==false && (S.settings.jaVoice||"auto")==="auto")
-        ? top.map(function(v){return v.name;}).join(", ")
-        : ((jaVoice()||{}).name || "\u2014");
+        ? top.map(function(v){ return jaLabel(v, list); }).join(", ")
+        : jaLabel(jaVoice()||list[0], list);
     now.textContent=label;
   }
 }
@@ -4169,7 +4208,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, moraCount:moraCount,
+      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,
