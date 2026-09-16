@@ -196,6 +196,24 @@ const same=await p.evaluate(()=>{
 });
 ok(same[0]==='Kyoko \u00b7 1' && same[1]==='Kyoko \u00b7 2','numbered rather than duplicated ('+JSON.stringify(same)+')');
 
+console.log('\n6f. the Settings sample is the same utterance a card plays');
+/* It was a hardcoded "gofun". The card moved to "gofun desu" and the button
+   did not, so Settings played the one form the voice cannot say and looked
+   like a regression in a fix that had already worked. */
+const sample=await p.evaluate(async()=>{
+  const k=window.__kl;
+  const fromDeck=k.sayTextOf(k.IDX['c1798']);
+  const fromButton=k.jaSampleText();
+  window.__spoke=[];
+  document.getElementById('jaVoiceTest').click();
+  await new Promise(r=>setTimeout(r,300));
+  return {fromDeck, fromButton, spoke:window.__spoke.slice()};
+});
+ok(sample.fromButton===sample.fromDeck,'the sample text comes from the card, not a copy of it ('+sample.fromButton+')');
+ok(!/\u3093$/.test(sample.fromButton),'and so it cannot end in n ('+sample.fromButton+')');
+ok(sample.spoke.length===1 && sample.spoke[0]===sample.fromDeck,
+   'pressing Test speaks exactly what the card speaks ('+JSON.stringify(sample.spoke)+')');
+
 console.log('\n7. no page errors');
 ok(errs.length===0,'the app ran clean'+(errs.length?': '+errs[0]:''));
 await b.close();

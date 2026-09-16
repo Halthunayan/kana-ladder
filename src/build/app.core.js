@@ -3903,6 +3903,16 @@ function audDownload(){
 /* He could not tell which voice was speaking, and neither could I. That is the
    whole reason a wrong pronunciation went three rounds before anyone looked at
    the voice list. The name of the voice now sits on screen. */
+/* The sample is read out of the deck, not typed here. It was typed here once,
+   as gofun, and then the card changed to gofun desu and the button did not:
+   Settings went on playing the bare word, which is the one case the voice
+   cannot say, and reported a fault in a fix that had already worked. The two
+   cannot drift apart again if there is only one of them. */
+function jaSampleText(){
+  var c=IDX["c1798"];
+  return (c && sayTextOf(c)) || "\u3054\u3075\u3093\u3067\u3059";
+}
+function jaSample(){ speakAt(jaSampleText(), S.settings.speechRate||0.85, false); }
 function renderJaVoicePicker(){
   var sel=document.getElementById("setJaVoice"); if(!sel) return;
   var list=jaRanked(), cur=S.settings.jaVoice||"auto", html="", i;
@@ -4003,11 +4013,9 @@ function bindSettings(){
     });
   });
   document.getElementById("setJaVoice").addEventListener("change",function(){
-    S.settings.jaVoice=this.value; save(); renderJaVoicePicker();
-    speakAt("\u3054\u3075\u3093", S.settings.speechRate||0.85, false); });
+    S.settings.jaVoice=this.value; save(); renderJaVoicePicker(); jaSample(); });
   document.getElementById("jaVoiceTest").addEventListener("click",function(){
-    renderJaVoicePicker();
-    speakAt("\u3054\u3075\u3093", S.settings.speechRate||0.85, false); });
+    renderJaVoicePicker(); jaSample(); });
   document.getElementById("setEnVoice").addEventListener("change",function(){
     S.settings.enVoice=this.value; save(); renderEnVoicePicker();
     carSay("This is how the English side will sound.","en",1.0); });
@@ -4243,7 +4251,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
+      enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,
