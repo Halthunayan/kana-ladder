@@ -1546,8 +1546,18 @@ function jaTop(){
   }
   return out;
 }
+/* Naming a voice is not an improvement, it is a restriction. His phone lists
+   only com.apple.voice.compact.ja-JP.Kyoko and its super-compact sibling, both
+   compressed and both robotic, while an utterance that names nothing is given a
+   voice iOS does not advertise and which sounds markedly better: that is what
+   he heard while the list was empty, and the robot is what came back the moment
+   the list did. So nothing is named unless he names it. The ranking still
+   decides what the picker offers and what it calls things, and it still keeps a
+   formant synthesiser out of the list, but it no longer overrides the engine's
+   own judgement by default. */
 function jaVoice(){
   var want=S.settings.jaVoice, list=jaUsable(), i;
+  if(!want || want==="auto") return null;   // let iOS choose, it chooses better
   /* pinned by identifier, not by name: two voices share the name Kyoko, so a
      name would have pinned whichever happened to be first. A pin to a voice
      that has since gone silent is ignored rather than honoured. */
@@ -4006,7 +4016,7 @@ function jaSample(){ speakAt(jaSampleText(), S.settings.speechRate||0.85, false)
 function renderJaVoicePicker(){
   var sel=document.getElementById("setJaVoice"); if(!sel) return;
   var list=jaRanked(), cur=S.settings.jaVoice||"auto", html="", i;
-  html+='<option value="auto">Best available</option>';
+  html+='<option value="auto">Best available (let iOS choose)</option>';
   var labels=jaLabels(list);
   for(i=0;i<list.length;i++){
     html+='<option value="'+esc(vId(list[i]))+'">'+esc(labels[i])+'</option>';
@@ -4018,17 +4028,20 @@ function renderJaVoicePicker(){
   var now=document.getElementById("jaVoiceNow");
   if(now){
     var top=jaTop();
-    var label = !list.length ? (ttsUsable() ? "whatever iOS picks for Japanese, which it does not list"
-                                            : "no Japanese voice on this phone")
-      : (top.length>1 && S.settings.speechVary!==false && (S.settings.jaVoice||"auto")==="auto")
-        ? top.map(function(v){ return jaLabel(v, list); }).join(", ")
-        : jaLabel(jaVoice()||list[0], list);
-    /* The identifier, printed once. Two voices called Kyoko cost three rounds
-       of guessing because nothing on screen said what the phone was reporting. */
-    var one=(top.length>1 && (S.settings.jaVoice||"auto")==="auto" && S.settings.speechVary!==false)
-      ? null : (jaVoice()||list[0]);
-    var idtxt=(one && vId(one) && vId(one)!==one.name) ? " ("+vId(one)+")" : "";
-    now.textContent=label+idtxt;
+    /* The identifier is printed with the name, because two voices called Kyoko
+       cost three rounds of guessing while nothing on screen said what the phone
+       was actually reporting. */
+    var chosen=jaVoice();
+    var label;
+    if(chosen){
+      label=jaLabel(chosen, list);
+      if(vId(chosen) && vId(chosen)!==chosen.name) label+=" ("+vId(chosen)+")";
+    } else if(ttsUsable()){
+      label="whatever iOS picks for Japanese, which sounds better than anything it lists";
+    } else {
+      label="no speech engine on this phone";
+    }
+    now.textContent=label;
   }
 }
 function renderEnVoicePicker(){

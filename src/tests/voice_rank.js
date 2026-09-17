@@ -61,14 +61,45 @@ ok(r.top.indexOf('Eloquence')<0,'the rotation pool never contains the robot ('+J
 ok(r.top.length===1 && r.top[0]==='Kyoko (Enhanced)','with Enhanced present the pool is just that one voice ('+JSON.stringify(r.top)+')');
 ok(r.onlyJa,'only Japanese voices are considered, the English list is separate');
 
+console.log('\n1b. by default no voice is named, because iOS chooses better than its own list');
+/* His diagnostic: the only voices his phone offers are
+   com.apple.voice.compact.ja-JP.Kyoko and its super-compact sibling, both
+   compressed and both robotic. While the list was empty the app named nothing,
+   iOS used a voice it does not advertise, and that is the one that sounded
+   right. Naming a listed voice is a restriction, not an improvement. */
+const auto=await p.evaluate(async()=>{
+  const k=window.__kl;
+  k.S.settings.jaVoice='auto';
+  window.__voice=[]; window.__spoke=[];
+  for(let i=0;i<4;i++){ k.speakCard(k.IDX['c0037']); await new Promise(r=>setTimeout(r,60)); }
+  return {named:window.__voice.filter(v=>v).length, spoke:window.__spoke.length,
+          picked:k.jaVoice()};
+});
+ok(auto.picked===null,'jaVoice names nothing on auto ('+JSON.stringify(auto.picked)+')');
+ok(auto.named===0,'so no card names a voice ('+auto.named+' of 4)');
+ok(auto.spoke===4,'and all four are still spoken ('+auto.spoke+' of 4)');
+
+console.log('\n1c. a voice chosen by hand is still honoured');
+const hand=await p.evaluate(async()=>{
+  const k=window.__kl;
+  const v=k.jaRanked()[0];
+  k.S.settings.jaVoice=k.vId(v);
+  window.__voice=[];
+  for(let i=0;i<3;i++){ k.speakCard(k.IDX['c0037']); await new Promise(r=>setTimeout(r,60)); }
+  const used=[...new Set(window.__voice)];
+  k.S.settings.jaVoice='auto';
+  return {want:v.name, used};
+});
+ok(hand.used.length===1 && hand.used[0]===hand.want,'picking one in Settings pins it ('+JSON.stringify(hand.used)+')');
+
 console.log('\n2. what actually speaks a card');
 const spoke=await p.evaluate(async()=>{
   const k=window.__kl; window.__spoke=[]; window.__voice=[];
   for(let i=0;i<6;i++){ k.speakCard(k.IDX['c0037']); await new Promise(r=>setTimeout(r,60)); }
   return {voices:window.__voice.slice(), texts:window.__spoke.slice()};
 });
-ok(spoke.voices.every(v=>v==='Kyoko (Enhanced)'),
-   'six consecutive cards all use the best voice, never the robot ('+JSON.stringify([...new Set(spoke.voices)])+')');
+ok(spoke.voices.every(v=>v===null),
+   'six consecutive cards name no voice, leaving the choice to iOS ('+JSON.stringify([...new Set(spoke.voices)])+')');
 
 console.log('\n3. a phone with no Enhanced download still rotates, but only among good voices');
 const noEnh=await p.evaluate(async()=>{
@@ -83,7 +114,6 @@ const noEnh=await p.evaluate(async()=>{
 });
 ok(noEnh.top.indexOf('Eloquence')<0,'Eloquence is still excluded ('+JSON.stringify(noEnh.top)+')');
 ok(noEnh.used.indexOf('Eloquence')<0,'and never speaks ('+JSON.stringify(noEnh.used)+')');
-ok(noEnh.used.length>1,'the two good voices still alternate, so variety survives ('+JSON.stringify(noEnh.used)+')');
 
 console.log('\n4. a chosen voice overrides the ranking');
 const chosen=await p.evaluate(async()=>{
@@ -142,22 +172,22 @@ const dup=await p.evaluate(async()=>{
   k.S.settings.jaVoice='auto'; window.__voice=[];
   for(let i=0;i<6;i++){ k.speakCard(k.IDX['c0037']); await new Promise(r=>setTimeout(r,50)); }
   const used=[...new Set(window.__voice)];
-  const uris=[];
-  for(let i=0;i<6;i++){ const v=k.jaVoice(); uris.push(v.voiceURI); }
+  /* on auto nothing is named, so what is tested here is what the picker offers */
+  const chosen=k.jaVoice();
   return {labels:list.map(v=>k.jaLabel(v,list)), top:top.length,
-          topLabel:top.map(v=>k.jaLabel(v,list)), used:used, uris:[...new Set(uris)]};
+          topLabel:top.map(v=>k.jaLabel(v,list)), used:used, chosen:chosen};
 });
-ok(dup.labels[0]==='Kyoko \u00b7 enhanced','the enhanced Kyoko is identified from its identifier and ranks first ('+dup.labels[0]+')');
+ok(dup.labels[0]==='Kyoko \u00b7 enhanced','the enhanced Kyoko is identified from its identifier and offered first ('+dup.labels[0]+')');
 ok(dup.labels.filter(x=>x==='Kyoko').length===0,'neither Kyoko is left ambiguously labelled ('+JSON.stringify(dup.labels)+')');
-ok(dup.top===1,'the rotation pool holds one voice per name, not two Kyokos ('+JSON.stringify(dup.topLabel)+')');
-ok(dup.uris.length===1 && dup.uris[0].indexOf('enhanced')>=0,
-   'every card is read by the enhanced one, never the compact ('+JSON.stringify(dup.uris)+')');
+ok(dup.top===1,'the list offers one voice per name, not two Kyokos ('+JSON.stringify(dup.topLabel)+')');
+ok(dup.chosen===null,'and on auto none of them is named, whatever the ranking says');
+ok(dup.used.length===1 && dup.used[0]===null,'so six cards in a row name nothing ('+JSON.stringify(dup.used)+')');
 
 console.log('\n6b. pinning works when two voices share a name');
 const pin=await p.evaluate(async()=>{
   const k=window.__kl;
   k.S.settings.jaVoice='com.apple.voice.compact.ja-JP.Kyoko';
-  const got=[]; for(let i=0;i<4;i++) got.push(k.jaVoice().voiceURI);
+  const got=[]; for(let i=0;i<4;i++){ const v=k.jaVoice(); got.push(v&&v.voiceURI); }
   k.S.settings.jaVoice='auto';
   return [...new Set(got)];
 });
@@ -170,7 +200,9 @@ const opaque=await p.evaluate(async()=>{
   k.TTS.voices=[{name:'Kyoko',lang:'ja-JP',voiceURI:'urn:voice:aaa111'},
                 {name:'Kyoko',lang:'ja-JP',voiceURI:'urn:voice:bbb222'}];
   const list=k.jaRanked();
-  const got=[]; for(let i=0;i<5;i++) got.push(k.jaVoice().voiceURI);
+  k.S.settings.jaVoice=k.vId(list[0]);
+  const got=[]; for(let i=0;i<5;i++){ const v=k.jaVoice(); got.push(v&&v.voiceURI); }
+  k.S.settings.jaVoice='auto';
   return {labels:list.map(v=>k.jaLabel(v,list)), used:[...new Set(got)]};
 });
 ok(opaque.labels[0]!==opaque.labels[1],'the two are still told apart in the list ('+JSON.stringify(opaque.labels)+')');

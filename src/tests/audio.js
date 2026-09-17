@@ -68,7 +68,7 @@ if(info.dir==='j' && !info.conj){
   ok(sp2.length===0,'it did not play the same word again on reveal');
 } else { console.log('   SKIP  first card was not a plain JP to EN card'); }
 
-console.log('\n2. rate is jittered and voices rotate');
+console.log('\n2. rate is jittered, and no voice is named');
 await clear();
 for(let i=0;i<8;i++){
   const s=await p.$('#showBtn'); if(s&&await s.isVisible()){await s.click();await p.waitForTimeout(40);}
@@ -78,7 +78,11 @@ const all=await spoken();
 const rates=[...new Set(all.map(x=>x.r&&x.r.toFixed(3)))];
 const voices=[...new Set(all.map(x=>x.v))];
 ok(rates.length>1,'playback rate varies across cards: '+rates.join(', '));
-ok(voices.length>1,'both device voices are used: '+voices.join(', '));
+/* Voices used to be rotated. His phone offers only compressed ones, and an
+   utterance that names none is given a voice iOS does not advertise which
+   sounds markedly better, so naming any of them is a restriction rather than
+   variety. The variety that remains, and that matters, is the rate. */
+ok(voices.every(v=>!v),'no card names a voice, leaving the choice to the engine: '+JSON.stringify(voices));
 ok(all.every(x=>x.r>=0.70 && x.r<=1.00),'every rate stayed inside the expected band');
 
 console.log('\n3. an English to Japanese card stays silent until the answer');
