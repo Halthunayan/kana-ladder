@@ -51,91 +51,60 @@ ok(set.bad.length===0,'every spoken form contains the card it is for ('+JSON.str
 ok(set.nogloss.length===0,'and comes with romaji and an English gloss, since he cannot read kana');
 ok(set.same.length===0,'and is a different word from the bare suffix');
 ok(set.nonCounter.length===0,'only counters were touched ('+JSON.stringify(set.nonCounter)+')');
-ok(set.funR==='gofun desu','fun is spoken as gofun desu ('+set.funR+')');
+ok(set.funR==='gofun desu','the written note still reads gofun desu ('+set.funR+')');
 ok(set.nfinal.length===0,'no spoken form ends in n, where the device voice releases the nasal into a vowel and gofun came back as "go-fun-o" ('+JSON.stringify(set.nfinal)+')');
 
-console.log('\n2. the voice says the real word, not the bare suffix');
+console.log('\n2. a card says the word it shows, and nothing else');
+/* The counters used to speak a whole phrase instead of themselves, a
+   workaround for the bare suffix sounding like "un" while every card went to
+   the downloaded library at a randomised speed. Both are fixed. A card that
+   shows fun and says "gofun desu, it is five minutes" is simply wrong, and he
+   said so. */
 const spoke=await p.evaluate(async()=>{
   const k=window.__kl; const out={};
-  for(const id of ['c1798','c1421','c1425','c1797']){
+  for(const id of ['c1798','c1421','c1425','c1797','c0037']){
     k.AUD.log.length=0; window.__spoke=[];
     k.speakCard(k.IDX[id]);
     await new Promise(r=>setTimeout(r,400));
-    out[id]={spoke:window.__spoke.slice(), clips:k.AUD.log.map(x=>x.k)};
+    out[id]={spoke:window.__spoke.slice(), kana:k.IDX[id].kana};
   }
   return out;
 });
-ok(spoke.c1798.spoke[0]==='ごふんです','the minute counter is read as gofun desu, ending on a vowel ('+JSON.stringify(spoke.c1798.spoke)+')');
-ok(spoke.c1421.spoke[0]==='いっこ','the small-object counter is read as ikko ('+JSON.stringify(spoke.c1421.spoke)+')');
-ok(spoke.c1425.spoke[0]==='さんじゅうど','the degree counter is read as sanjuudo ('+JSON.stringify(spoke.c1425.spoke)+')');
-ok(spoke.c1797.spoke[0]==='いちじ','the hour counter is read as ichiji ('+JSON.stringify(spoke.c1797.spoke)+')');
-ok(Object.values(spoke).every(x=>x.clips.length===0),
-   'and none of them reaches the downloaded library, whose clip is the bare suffix this change exists to stop playing');
+for(const id of ['c1798','c1421','c1425','c1797','c0037']){
+  ok(spoke[id].spoke[0]===spoke[id].kana,
+     id+' is read as exactly what it shows, '+spoke[id].kana+' ('+JSON.stringify(spoke[id].spoke)+')');
+}
+ok(Object.values(spoke).every(x=>x.spoke.length===1),'one utterance per card, no phrase substituted');
 
-console.log('\n3. a card with no spoken form is untouched');
-const plain=await p.evaluate(async()=>{
-  const k=window.__kl; k.AUD.log.length=0; window.__spoke=[];
-  k.speakCard(k.IDX['c0037']);
-  await new Promise(r=>setTimeout(r,400));
-  const n=k.DECK.filter(c=>c.say).length;
-  return {spoke:window.__spoke.slice(), untouched:k.DECK.length-n, total:k.DECK.length};
+console.log('\n3. the library clip is available to every card again');
+const clips=await p.evaluate(async()=>{
+  const k=window.__kl; const was=k.TTS.ja, wasSeen=k.TTS.seen;
+  k.TTS.ja=null; k.TTS.seen=false;      // no speech engine at all
+  const out={};
+  for(const id of ['c1798','c0037']){
+    k.AUD.log.length=0; window.__spoke=[];
+    k.speakCard(k.IDX[id]);
+    await new Promise(r=>setTimeout(r,800));
+    out[id]=k.AUD.log.map(x=>x.k);
+  }
+  k.TTS.ja=was; k.TTS.seen=wasSeen; return out;
 });
-ok(plain.spoke[0]==='よん','yon is still read as yon, unchanged ('+JSON.stringify(plain.spoke)+')');
-ok(plain.untouched===1792,'1,792 of 1,812 cards are not affected at all ('+plain.untouched+')');
+ok(clips.c1798.indexOf('wj:c1798')>=0,'a counter can reach its clip, as any other card can ('+JSON.stringify(clips.c1798)+')');
+ok(clips.c0037.indexOf('wj:c0037')>=0,'and so can an ordinary word ('+JSON.stringify(clips.c0037)+')');
 
-console.log('\n3b. his phone: no Japanese voice listed, but Japanese can still be spoken');
-/* The Settings test named no voice and spoke correct Japanese while every card
-   went to the downloaded library, because the card path asked whether a voice
-   was in the list rather than whether Japanese could be spoken. */
+console.log('\n4. with a live engine, no listed voice, the device still speaks');
 const unlisted=await p.evaluate(async()=>{
-  const k=window.__kl;
-  const was=k.TTS.voices, wasJa=k.TTS.ja;
-  k.TTS.voices=[]; k.TTS.ja=false; k.TTS.seen=true;      // engine alive, nothing listed
+  const k=window.__kl; const was=k.TTS.voices, wasJa=k.TTS.ja;
+  k.TTS.voices=[]; k.TTS.ja=false; k.TTS.seen=true;
   k.AUD.log.length=0; window.__spoke=[];
   k.speakCard(k.IDX['c0037']);
   await new Promise(r=>setTimeout(r,500));
   const r={spoke:window.__spoke.slice(), clips:k.AUD.log.map(x=>x.k), usable:k.ttsUsable()};
-  k.TTS.voices=was; k.TTS.ja=wasJa;
-  return r;
+  k.TTS.voices=was; k.TTS.ja=wasJa; return r;
 });
-ok(unlisted.usable===true,'the app judges Japanese speakable when the engine is alive ('+unlisted.usable+')');
-ok(unlisted.spoke[0]==='\u3088\u3093','yon is spoken by the device, not sent to the library ('+JSON.stringify(unlisted.spoke)+')');
-ok(unlisted.clips.length===0,'and no clip is played ('+JSON.stringify(unlisted.clips)+')');
-
-console.log('\n4. with no speech engine at all, a counter card falls back to its clip rather than going silent');
-/* His phone stopped reporting any Japanese voice. Every other card fell back
-   to the downloaded library and played; these twenty had been forbidden their
-   clip so that the library could not say the bare suffix, and so they played
-   nothing at all. A roughly said word beats no word. */
-const noVoice=await p.evaluate(async()=>{
-  const k=window.__kl; const was=k.TTS.ja, wasSeen=k.TTS.seen;
-  k.TTS.ja=null; k.TTS.seen=false;
-  k.AUD.log.length=0; window.__spoke=[];
-  k.speakCard(k.IDX['c1798']);
-  await new Promise(r=>setTimeout(r,800));
-  const r={clips:k.AUD.log.map(x=>x.k), spoke:window.__spoke.slice()};
-  k.TTS.ja=was; k.TTS.seen=wasSeen; return r;
-});
-ok(noVoice.clips.length===1 && noVoice.clips[0]==='wj:c1798',
-   'the clip is played, so the card is not silent ('+JSON.stringify(noVoice.clips)+')');
-const withVoice=await p.evaluate(async()=>{
-  const k=window.__kl; k.AUD.log.length=0; window.__spoke=[];
-  k.speakCard(k.IDX['c1798']);
-  await new Promise(r=>setTimeout(r,500));
-  return {clips:k.AUD.log.map(x=>x.k), spoke:window.__spoke.slice()};
-});
-ok(withVoice.clips.length===0,'and while a voice exists the clip is still refused ('+JSON.stringify(withVoice.clips)+')');
-ok(withVoice.spoke[0]==='\u3054\u3075\u3093\u3067\u3059','the fuller form being preferred instead ('+JSON.stringify(withVoice.spoke)+')');
-const plainNoVoice=await p.evaluate(async()=>{
-  const k=window.__kl; const was=k.TTS.ja, wasSeen=k.TTS.seen;
-  k.TTS.ja=null; k.TTS.seen=false;
-  k.AUD.log.length=0; window.__spoke=[];
-  k.speakCard(k.IDX['c0037']);
-  await new Promise(r=>setTimeout(r,800));
-  const r={clips:k.AUD.log.map(x=>x.k)};
-  k.TTS.ja=was; k.TTS.seen=wasSeen; return r;
-});
-ok(plainNoVoice.clips.length===1,'an ordinary card behaves the same way, as it always did ('+JSON.stringify(plainNoVoice.clips)+')');
+ok(unlisted.usable===true,'Japanese is judged speakable when the engine is alive');
+ok(unlisted.spoke[0]==='\u3088\u3093','and the device speaks it ('+JSON.stringify(unlisted.spoke)+')');
+ok(unlisted.clips.length===0,'without touching the library ('+JSON.stringify(unlisted.clips)+')');
 
 console.log('\n5. the spoken form is shown to the reader, and only where it is not the answer');
 const html=await p.evaluate(()=>{

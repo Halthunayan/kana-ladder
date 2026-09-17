@@ -1465,7 +1465,10 @@ function jaScore(v){
   var n=vText(v).toLowerCase(), sc=0, i;
   for(i=0;i<JA_ROBOT.length;i++) if(n.indexOf(JA_ROBOT[i])>=0) sc-=100;
   if(/enhanced|premium|neural/.test(n)) sc+=40;
-  if(/compact/.test(n)) sc-=20;
+  /* his phone offers com.apple.voice.compact and com.apple.voice.super-compact
+     of the same Kyoko; the smaller one is the worse one */
+  if(/super-compact/.test(n)) sc-=30;
+  else if(/compact/.test(n)) sc-=20;
   for(i=0;i<JA_GOOD.length;i++) if(n.indexOf(JA_GOOD[i])>=0){ sc+=20; break; }
   if(v.localService) sc+=2;
   if(v.default) sc+=1;
@@ -1717,7 +1720,14 @@ var SAY_GEN=0;
    that is the thing worth knowing, but it is spoken in the smallest real form
    that contains it: gofun, ikko, sanjuudo. The card says so underneath, so the
    audio and the kana are never seen to disagree. */
-function sayTextOf(c){ return (c && c.say) ? c.say : (c ? c.kana : ""); }
+/* A card says the word it shows. The counters carried a spoken form instead,
+   a whole phrase, because the bare suffix came back sounding like "un" when
+   every card was being read by the downloaded library at a randomised speed.
+   Both of those are fixed, yon is right again, and a card that shows fun and
+   says "gofun desu, it is five minutes" is now just wrong. The spoken form
+   stays on the back of the card as writing, where it teaches that a counter is
+   used with a number without putting words in the voice's mouth. */
+function sayTextOf(c){ return c ? c.kana : ""; }
 function speakCard(c, slow){
   if(!c) return;
   var base=S.settings.speechRate||0.85;
@@ -1744,7 +1754,7 @@ function speakCard(c, slow){
      fell back to the library and played, and these twenty went silent. A
      roughly said word beats no word, so the clip is skipped only while there
      is a real voice available to say the fuller form instead. */
-  var key=(c && c.say && ttsUsable()) ? null : clipFor(c);
+  var key=clipFor(c);
   if(key && audOn()){
     var g=++SAY_GEN;
     audStop();

@@ -119,12 +119,12 @@ const jit=await p.evaluate(async()=>{
     window.SpeechSynthesisUtterance=S;
     if(got!=null) seen[bin][got.toFixed(3)]=1;
     await new Promise(r=>setTimeout(r,20)); } };
-  await grab('c0037','short');
-  await grab('c1798','long');
+  await grab('c0037','short');     // yon, two morae
+  await grab('c0000','long');      // konnichiwa, five morae
   return {short:Object.keys(seen.short), long:Object.keys(seen.long)};
 });
 ok(jit.short.length===1,'yon is spoken at one fixed rate every time ('+JSON.stringify(jit.short)+')');
-ok(jit.long.length>1,'gofun, being three morae, still varies ('+jit.long.length+' distinct rates)');
+ok(jit.long.length>1,'a word of three morae or more still varies ('+jit.long.length+' distinct rates)');
 
 console.log('\n6. two voices called Kyoko, which is what his phone actually reports');
 /* Downloading Kyoko Enhanced did not add "Kyoko (Enhanced)" to Safari's list.
@@ -216,7 +216,10 @@ const sample=await p.evaluate(async()=>{
   return {fromDeck, fromButton, spoke:window.__spoke.slice()};
 });
 ok(sample.fromButton===sample.fromDeck,'the sample text comes from the card, not a copy of it ('+sample.fromButton+')');
-ok(!/\u3093$/.test(sample.fromButton),'and so it cannot end in n ('+sample.fromButton+')');
+/* It used to assert the sample could not end in n, because the counters spoke
+   a phrase and a word-final n came back with a vowel on it. Cards say the word
+   they show again, so fun ends in n by definition and must. */
+ok(sample.fromButton==='\u3075\u3093','which is the word on the card, not a phrase ('+sample.fromButton+')');
 ok(sample.spoke.length===1 && sample.spoke[0]===sample.fromDeck,
    'pressing Test speaks exactly what the card speaks ('+JSON.stringify(sample.spoke)+')');
 
