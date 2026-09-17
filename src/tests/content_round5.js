@@ -1,6 +1,22 @@
 /* The fifth round: trip-window sentence coverage, the tai form, and the form
    table's named-triple layout. Checked against the running app, not the files. */
 const {chromium}=require('playwright');
+const FIXTURE='/tmp/bk.json';
+/* This suite reads a copy of his own saved state. It is not in the repository
+   and never will be: it is his review history, and the site is public. Three
+   suites depend on it, none creates it, and it had simply been sitting on the
+   machine that wrote them since the day it was uploaded. Adding this file to
+   the pipeline therefore broke the deploy, on a runner where it does not
+   exist, while passing here. A missing fixture now says so instead of throwing
+   halfway through. */
+function fixture(fs){
+  try{ return fs.readFileSync(FIXTURE,'utf8'); }
+  catch(e){
+    console.log('\n  SKIPPED: this section needs '+FIXTURE+', a copy of his saved state,');
+    console.log('  which is deliberately not in the repository. Run it where that file is.');
+    return null;
+  }
+}
 const fails=[]; const ok=(c,m)=>{ if(c) console.log('  PASS  '+m); else { fails.push(m); console.log('  FAIL  '+m);} };
 const today=new Date(Date.now()-14400000).toISOString().slice(0,10);
 const base=()=>({rev:9,
@@ -376,10 +392,11 @@ ok(g.afterSecond>120000,'and the third by the longer one ('+Math.round(g.afterSe
 console.log('\n16. a miss only holds the screen when there is something to read');
 {
 const fs2=require('fs');
+const blob16=fixture(fs2);
+if(blob16){
 const ctx7=await b.newContext({viewport:{width:393,height:852}});
 const p7=await ctx7.newPage();
-await p7.addInitScript(r=>{try{localStorage.setItem('kanaladder.v1',r);}catch(e){}},
-  fs2.readFileSync('/tmp/bk.json','utf8'));
+await p7.addInitScript(r=>{try{localStorage.setItem('kanaladder.v1',r);}catch(e){}}, blob16);
 await p7.goto('http://127.0.0.1:8100/index.html',{timeout:20000});
 await p7.waitForFunction(()=>window.__kl&&window.__kl.DECK.length>0,null,{timeout:20000});
 await p7.waitForTimeout(900);
@@ -417,6 +434,7 @@ ok(pick && held.next===false && held.box===false,
    pick ? 'missing "'+pick.romaji+'" moves straight on, no empty Next card button'
         : 'could not reach a word without a twin');
 await ctx7.close();
+}   /* end of the section that needs the saved-state fixture */
 }
 
 console.log('\n17. the pre-rendered library still works, because car mode needs it');
