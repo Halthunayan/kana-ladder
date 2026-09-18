@@ -473,15 +473,22 @@ ok(noMan===false,'and with no manifest it reports failure so the caller can fall
 await ctx8.close();
 }
 
-console.log('\n17a. a card is read by the phone\u2019s own voice, not the downloaded one');
+console.log('\n17a. a card is read by the downloaded library, and the phone’s voice is the fallback');
 {
-/* The downloaded library exists because iOS will not send Web Speech to
-   CarPlay. That is a car mode problem. Routing study cards through it too made
-   every card play a small model that mispronounces a word said on its own: yon
-   arrived as "yeiiin" while the phone's own Kyoko had been saying it correctly
-   all along. The rule is now explicit and asserted: a phone with a Japanese
-   voice hears that voice on a card, a phone without one falls back to the
-   library, and car mode is untouched either way. */
+/* This rule has now been inverted once, on evidence both times, so both
+   readings are written down. The library was kept out of cards because it
+   mispronounced a word said on its own: yon arrived as "yeiiin" while the
+   phone's own Kyoko said it correctly. Then iOS stopped putting Safari's
+   speech anywhere audible on his handset. The engine accepted every line and
+   reported that it had started and finished, while the sound went to a CarPlay
+   unit that was not in the room, and Speak Screen worked the whole time. A web
+   page cannot see that, ask where its audio went, or do anything about it.
+   The library has no such failure: an audio element plays wherever the phone
+   plays anything. So the library is the voice, the device is the fallback, and
+   the switch in Settings puts the device back in front for a phone without
+   this fault. The mispronunciation that caused the first rule was fixed at
+   source, by rendering each word inside a carrier sentence in the model's
+   second voice, not by routing around it. */
 const ctxA=await b.newContext({viewport:{width:393,height:852}});
 const pA=await ctxA.newPage();
 await pA.addInitScript(()=>{ window.__spoke=[];
@@ -496,29 +503,41 @@ await pA.waitForTimeout(1500);
 const withVoice=await pA.evaluate(async()=>{
   const k=window.__kl; k.AUD.log.length=0; window.__spoke=[];
   k.speakCard(k.IDX['c0037']);
-  await new Promise(r=>setTimeout(r,500));
+  await new Promise(r=>setTimeout(r,800));
   return {ja:k.ttsReady(), spoke:window.__spoke.slice(), clips:k.AUD.log.map(x=>x.k)};
 });
 ok(withVoice.ja===true,'the device reports a Japanese voice');
-ok(withVoice.spoke.length===1 && withVoice.spoke[0]==='\u3088\u3093',
-   'the card is read by that voice ('+JSON.stringify(withVoice.spoke)+')');
-ok(withVoice.clips.length===0,
-   'and the downloaded library is not touched on a card ('+JSON.stringify(withVoice.clips)+')');
-/* His phone lists no Japanese voice and speaks correct Japanese anyway, so an
-   empty voice list is no longer a reason to go to the library: the card path
-   asks whether Japanese can be spoken, not whether a voice is named. Only a
-   phone with no speech engine at all falls back. */
-const unlisted=await pA.evaluate(async()=>{
-  const k=window.__kl; k.TTS.ja=null; k.TTS.seen=true;
+ok(withVoice.clips.indexOf('wj:c0037')>=0,
+   'the card is read by the library even so ('+JSON.stringify(withVoice.clips)+')');
+ok(withVoice.spoke.every(t=>t==='よん'),
+   'and the device is never handed anything but the bare word ('+JSON.stringify(withVoice.spoke)+')');
+/* Turned off, the old behaviour comes back whole: the phone speaks and the
+   library is not touched at all. */
+const manual=await pA.evaluate(async()=>{
+  const k=window.__kl; const was=k.S.settings.cardAudio;
+  k.S.settings.cardAudio=false;
   k.AUD.log.length=0; window.__spoke=[];
   k.speakCard(k.IDX['c0037']);
-  await new Promise(r=>setTimeout(r,900));
-  return {clips:k.AUD.log.map(x=>x.k), spoke:window.__spoke.slice()};
+  await new Promise(r=>setTimeout(r,500));
+  const r={clips:k.AUD.log.map(x=>x.k), spoke:window.__spoke.slice()};
+  k.S.settings.cardAudio=was; return r;
 });
-ok(unlisted.spoke.indexOf('\u3088\u3093')>=0,
-   'a phone that lists no Japanese voice is still read by the device ('+JSON.stringify(unlisted.spoke)+')');
-ok(unlisted.clips.length===0,
-   'and is not sent to the library ('+JSON.stringify(unlisted.clips)+')');
+ok(manual.spoke.indexOf('よん')>=0,
+   'with the switch off the device reads the card ('+JSON.stringify(manual.spoke)+')');
+ok(manual.clips.length===0,
+   'and the library is not touched ('+JSON.stringify(manual.clips)+')');
+/* A phone that never downloaded the audio still has to speak. */
+const noLib=await pA.evaluate(async()=>{
+  const k=window.__kl; const was=k.S.settings.carAudio;
+  k.S.settings.carAudio=false;
+  k.AUD.log.length=0; window.__spoke=[];
+  k.speakCard(k.IDX['c0037']);
+  await new Promise(r=>setTimeout(r,500));
+  const r={clips:k.AUD.log.map(x=>x.k), spoke:window.__spoke.slice()};
+  k.S.settings.carAudio=was; return r;
+});
+ok(noLib.spoke.indexOf('よん')>=0,
+   'a phone with no downloaded audio is read by the device ('+JSON.stringify(noLib.spoke)+')');
 const noEngine=await pA.evaluate(async()=>{
   const k=window.__kl; k.TTS.ja=null; k.TTS.seen=false;
   k.AUD.log.length=0; window.__spoke=[];

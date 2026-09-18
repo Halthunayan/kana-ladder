@@ -54,57 +54,70 @@ ok(set.nonCounter.length===0,'only counters were touched ('+JSON.stringify(set.n
 ok(set.funR==='gofun desu','the written note still reads gofun desu ('+set.funR+')');
 ok(set.nfinal.length===0,'no spoken form ends in n, where the device voice releases the nasal into a vowel and gofun came back as "go-fun-o" ('+JSON.stringify(set.nfinal)+')');
 
-console.log('\n2. a card says the word it shows, and nothing else');
-/* The counters used to speak a whole phrase instead of themselves, a
-   workaround for the bare suffix sounding like "un" while every card went to
-   the downloaded library at a randomised speed. Both are fixed. A card that
-   shows fun and says "gofun desu, it is five minutes" is simply wrong, and he
-   said so. */
-const spoke=await p.evaluate(async()=>{
+console.log('\n2. a card plays the clip for the word it shows, and nothing else');
+/* The counters used to speak a whole phrase instead of themselves, and that is
+   still wrong. What changed is who says it. iOS stopped putting Safari's speech
+   anywhere audible on his phone: the engine accepted every line, reported that
+   it had started and finished, and sent the sound to a CarPlay unit that was
+   not in the room. A web page cannot see that or correct it, so the library is
+   the voice now and the device is the fallback. The assertion is the same in
+   spirit as before: one sound per card, and it is the word the card shows. */
+const played=await p.evaluate(async()=>{
   const k=window.__kl; const out={};
   for(const id of ['c1798','c1421','c1425','c1797','c0037']){
     k.AUD.log.length=0; window.__spoke=[];
     k.speakCard(k.IDX[id]);
-    await new Promise(r=>setTimeout(r,400));
-    out[id]={spoke:window.__spoke.slice(), kana:k.IDX[id].kana};
+    await new Promise(r=>setTimeout(r,800));
+    out[id]={words:k.AUD.log.map(x=>x.k).filter(x=>/^(wj|sj):/.test(x)),
+             spoke:window.__spoke.slice(), kana:k.IDX[id].kana};
   }
   return out;
 });
 for(const id of ['c1798','c1421','c1425','c1797','c0037']){
-  ok(spoke[id].spoke[0]===spoke[id].kana,
-     id+' is read as exactly what it shows, '+spoke[id].kana+' ('+JSON.stringify(spoke[id].spoke)+')');
+  ok(played[id].words.length===1 && played[id].words[0]==='wj:'+id,
+     id+' plays its own clip and only that, '+played[id].kana+' ('+JSON.stringify(played[id].words)+')');
+  ok(played[id].spoke.every(t=>t===played[id].kana),
+     id+' never hands the device anything but the bare word ('+JSON.stringify(played[id].spoke)+')');
 }
-ok(Object.values(spoke).every(x=>x.spoke.length===1),'one utterance per card, no phrase substituted');
 
-console.log('\n3. the library clip is available to every card again');
-const clips=await p.evaluate(async()=>{
-  const k=window.__kl; const was=k.TTS.ja, wasSeen=k.TTS.seen;
-  k.TTS.ja=null; k.TTS.seen=false;      // no speech engine at all
+console.log('\n3. with no library at all, the device says the bare word');
+/* The library is the voice, not the only voice. A phone that has never
+   downloaded the audio, or a card whose clip is missing, still has to speak,
+   and it still has to speak the word on the card rather than a phrase. */
+const nolib=await p.evaluate(async()=>{
+  const k=window.__kl; const was=k.S.settings.carAudio;
+  k.S.settings.carAudio=false;                 // the library is not there
   const out={};
   for(const id of ['c1798','c0037']){
     k.AUD.log.length=0; window.__spoke=[];
     k.speakCard(k.IDX[id]);
-    await new Promise(r=>setTimeout(r,800));
-    out[id]=k.AUD.log.map(x=>x.k);
+    await new Promise(r=>setTimeout(r,500));
+    out[id]={spoke:window.__spoke.slice(), clips:k.AUD.log.map(x=>x.k), kana:k.IDX[id].kana};
   }
-  k.TTS.ja=was; k.TTS.seen=wasSeen; return out;
+  k.S.settings.carAudio=was; return out;
 });
-ok(clips.c1798.indexOf('wj:c1798')>=0,'a counter can reach its clip, as any other card can ('+JSON.stringify(clips.c1798)+')');
-ok(clips.c0037.indexOf('wj:c0037')>=0,'and so can an ordinary word ('+JSON.stringify(clips.c0037)+')');
+for(const id of ['c1798','c0037']){
+  ok(nolib[id].spoke[0]===nolib[id].kana,
+     id+' falls back to the device, saying exactly '+nolib[id].kana+' ('+JSON.stringify(nolib[id].spoke)+')');
+  ok(nolib[id].spoke.length===1,'one utterance, no phrase substituted ('+JSON.stringify(nolib[id].spoke)+')');
+}
 
-console.log('\n4. with a live engine, no listed voice, the device still speaks');
-const unlisted=await p.evaluate(async()=>{
-  const k=window.__kl; const was=k.TTS.voices, wasJa=k.TTS.ja;
-  k.TTS.voices=[]; k.TTS.ja=false; k.TTS.seen=true;
+console.log('\n4. the switch still puts the device voice back in front');
+/* Read aloud through the phone is broken on his handset and healthy on most
+   others, so the old behaviour stays one tap away rather than being deleted.
+   Turned off, the device speaks and the library is not touched at all. */
+const manual=await p.evaluate(async()=>{
+  const k=window.__kl; const was=k.S.settings.cardAudio;
+  k.S.settings.cardAudio=false;                // use the phone's own voice
   k.AUD.log.length=0; window.__spoke=[];
   k.speakCard(k.IDX['c0037']);
   await new Promise(r=>setTimeout(r,500));
   const r={spoke:window.__spoke.slice(), clips:k.AUD.log.map(x=>x.k), usable:k.ttsUsable()};
-  k.TTS.voices=was; k.TTS.ja=wasJa; return r;
+  k.S.settings.cardAudio=was; return r;
 });
-ok(unlisted.usable===true,'Japanese is judged speakable when the engine is alive');
-ok(unlisted.spoke[0]==='\u3088\u3093','and the device speaks it ('+JSON.stringify(unlisted.spoke)+')');
-ok(unlisted.clips.length===0,'without touching the library ('+JSON.stringify(unlisted.clips)+')');
+ok(manual.usable===true,'Japanese is judged speakable when the engine is alive');
+ok(manual.spoke[0]==='\u3088\u3093','and the device speaks it ('+JSON.stringify(manual.spoke)+')');
+ok(manual.clips.length===0,'without touching the library ('+JSON.stringify(manual.clips)+')');
 
 console.log('\n5. the spoken form is shown to the reader, and only where it is not the answer');
 const html=await p.evaluate(()=>{
