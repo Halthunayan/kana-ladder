@@ -48,7 +48,7 @@ var CONJ_GATE=3;   // days of interval a word must hold before its forms are dri
 function isSent(c){ return c && c.t==="s"; }
 
 var LEARN = [60, 600], RELEARN = [600], SHARDS = 8, LS_KEY = "kanaladder.v1";
-var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto"};
+var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, cardAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto"};
 
 var S = {rev:0, items:{}, settings:Object.assign({},DEFAULTS),
   daily:{key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,noNew:false,buried:{},done:{},missed:{}}, hist:{}, streak:{cur:0,best:0,last:""}, life:{ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{}, checks:[], log:[]};
@@ -1743,15 +1743,16 @@ function speakCard(c, slow){
   var base=S.settings.speechRate||0.85;
   var rate = slow ? Math.max(0.4, base-0.30) : base;
   var say=sayTextOf(c);
-  /* The phone's own Japanese voice reads the card. The pre-rendered library
-     exists for one reason: iOS will not route Web Speech to CarPlay. That is a
-     car mode problem and only a car mode problem. Routing study cards through
-     it as well was a mistake, and an expensive one: the library is a small
-     model that mispronounces a word standing on its own, so yon arrived as
-     "yeiiin" on every card, while the phone's own voice had been saying it
-     correctly all along. The library stays where it is needed and nowhere
-     else, and it is still the fallback for a phone with no Japanese voice. */
-  if(ttsUsable() && S.settings.cardAudio!==true){
+  /* The library reads the card. The phone's own voice used to, and then iOS
+     stopped putting it anywhere audible: the engine accepted every line and
+     reported that it had started and finished speaking, while the sound went
+     to a car that was not in the room. A web page cannot see that happen, ask
+     where its audio went, or do anything about it. An audio file plays
+     wherever the phone plays anything, so the app now speaks with audio it
+     ships and the device voice is the fallback, not the voice. Turning this
+     off in Settings puts the device voice back in front for anyone whose
+     phone does not have this fault. */
+  if(ttsUsable() && S.settings.cardAudio===false){
     SAY_GEN++;
     slow ? speakSlow(say) : speak(say);
     return;
@@ -2083,7 +2084,7 @@ function wireSpeak(c){
          One card taught two different pronunciations of its own word, and the
          wrong one sat directly beneath the right one. */
       var sx = (key.indexOf("sj:")===0) ? SIDX[key.slice(3)] : null;
-      if(sx && sx.kana && ttsUsable() && S.settings.cardAudio!==true){ speak(sx.kana); return; }
+      if(sx && sx.kana && ttsUsable() && S.settings.cardAudio===false){ speak(sx.kana); return; }
       if(!audOn()){ toast("Turn the downloaded voice on in Settings to hear examples"); return; }
       audPlay(key, 1, function(){ return g===SAY_GEN; }).then(function(ok){
         if(!ok && g===SAY_GEN) toast("That example has no recording yet");
