@@ -1,8 +1,11 @@
-var CACHE = "kana-ladder-v44";
+var CACHE = "kana-ladder-v45";
 /* The voice files are large and never change in place, so they live in their
    own cache and survive every deploy. Wiping them with the shell would make a
-   two line change cost a forty megabyte re-download. */
-var AUDIO_CACHE = "kana-audio-v1";
+   two line change cost a forty megabyte re-download. The name is bumped only
+   when the whole library is re-rendered, as it was for the second voice: every
+   sprite has a new name anyway, so keeping the old bucket would leave fifty
+   four megabytes of audio on the phone that nothing will ever ask for again. */
+var AUDIO_CACHE = "kana-audio-v2";
 var SHELL = ["./","./index.html","./manifest.webmanifest",
   "./icons/apple-touch-icon.png","./icons/icon-192.png","./icons/icon-512.png",
   "./icons/icon-maskable-512.png","./icons/favicon-32.png"];
