@@ -34,6 +34,33 @@ if _dups:
 # ---- guards: the deck must stay usable in both directions ----
 import json as _j, collections as _c, re as _re
 _d=_j.loads(deck); _s=_j.loads(sent)
+
+# ---- guard: an inflected adjective still has to be a word the sentence knows ----
+# A sentence unlocks when at most one of its words is unknown, and that one gap
+# is glossed. The gate can only count words the sentence lists, so a word that
+# appears inflected and is not listed is invisible to it: tesuto wa muzukashiku
+# nakatta desu shipped with tesuto as the declared gap while muzukashii, right
+# there in the middle of it, was never counted. He met the sentence with two
+# unknown words in it and said so. An i-adjective's adverbial and past forms are
+# regular, so they can be checked here rather than trusted.
+import re as _re1
+_adj=[(c['id'], c['romaji'][:-1]) for c in _d
+      if c.get('pos')=='adj-i' and (c.get('romaji') or '').endswith('i')
+      and len(c.get('romaji') or '')>2]
+_IDIOM={'yoroshiku'}          # a set greeting, not the adjective in use
+_gaps=[]
+for _x in _s:
+    _toks=set(_re1.split(r"[^a-z']+", (_x.get('romaji') or '').lower()))
+    for _wid,_stem in _adj:
+        _forms={_stem+suf for suf in ('ku','katta','kute','kereba','kunai','kunakatta')}-_IDIOM
+        if (_forms & _toks) and _wid not in (_x.get('w') or []):
+            _gaps.append(_x['id']+' needs '+_wid)
+if _gaps:
+    raise SystemExit('these sentences use an inflected i-adjective they do not '
+                     'list as one of their words, so the readability gate cannot '
+                     'see it: ' + ', '.join(_gaps[:12]) +
+                     (' and %d more' % (len(_gaps)-12) if len(_gaps)>12 else ''))
+
 def _gloss(_t):
     # Case and punctuation are not something the learner types, so two glosses
     # that differ only in those are the same prompt. A bracketed note is kept:
