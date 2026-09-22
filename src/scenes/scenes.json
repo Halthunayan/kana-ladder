@@ -1,0 +1,522 @@
+[
+ {
+  "id": "sc01",
+  "title": "Arrival and immigration",
+  "en": "At the passport desk after landing. Many officers say nothing, or ask in English; these are the questions if they come.",
+  "lines": [
+   {
+    "sid": "nB046",
+    "who": "them"
+   },
+   {
+    "sid": "nS001",
+    "who": "you"
+   },
+   {
+    "sid": "nS002",
+    "who": "them"
+   },
+   {
+    "sid": "nS003",
+    "who": "you"
+   },
+   {
+    "sid": "nS004",
+    "who": "them"
+   },
+   {
+    "sid": "nS005",
+    "who": "you"
+   },
+   {
+    "sid": "nS001",
+    "who": "them"
+   },
+   {
+    "sid": "nA123",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc03",
+  "title": "Taking a taxi",
+  "en": "From the station to your hotel.",
+  "lines": [
+   {
+    "sid": "nS027",
+    "who": "them"
+   },
+   {
+    "sid": "nA034",
+    "who": "you"
+   },
+   {
+    "sid": "nB010",
+    "who": "them"
+   },
+   {
+    "sid": "nS019",
+    "who": "you"
+   },
+   {
+    "sid": "nS009",
+    "who": "them"
+   },
+   {
+    "sid": "nS028",
+    "who": "them"
+   },
+   {
+    "sid": "nS029",
+    "who": "you"
+   },
+   {
+    "sid": "nB026",
+    "who": "them"
+   },
+   {
+    "sid": "nS030",
+    "who": "you"
+   },
+   {
+    "sid": "nA123",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc04",
+  "title": "Hotel check-in",
+  "en": "At the front desk with a booking.",
+  "lines": [
+   {
+    "sid": "nA098",
+    "who": "you"
+   },
+   {
+    "sid": "nB063",
+    "who": "them"
+   },
+   {
+    "sid": "nS006",
+    "who": "you"
+   },
+   {
+    "sid": "nB046",
+    "who": "them"
+   },
+   {
+    "sid": "nS001",
+    "who": "you"
+   },
+   {
+    "sid": "nB044",
+    "who": "them"
+   },
+   {
+    "sid": "nS031",
+    "who": "them"
+   },
+   {
+    "sid": "nG012",
+    "who": "you"
+   },
+   {
+    "sid": "nS007",
+    "who": "them"
+   },
+   {
+    "sid": "nS032",
+    "who": "them"
+   },
+   {
+    "sid": "nS010",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc05",
+  "title": "Convenience store",
+  "en": "A quick purchase at the register.",
+  "lines": [
+   {
+    "sid": "nB001",
+    "who": "them"
+   },
+   {
+    "sid": "nS033",
+    "who": "you"
+   },
+   {
+    "sid": "nB059",
+    "who": "them"
+   },
+   {
+    "sid": "nA124",
+    "who": "you"
+   },
+   {
+    "sid": "nB023",
+    "who": "them"
+   },
+   {
+    "sid": "nB030",
+    "who": "them"
+   },
+   {
+    "sid": "nS029",
+    "who": "you"
+   },
+   {
+    "sid": "nB006",
+    "who": "them"
+   }
+  ]
+ },
+ {
+  "id": "sc06",
+  "title": "Ordering at a restaurant",
+  "en": "Being seated and placing an order. Many places use a call button or a tablet; the words are the same.",
+  "lines": [
+   {
+    "sid": "nB061",
+    "who": "them"
+   },
+   {
+    "sid": "nS008",
+    "who": "you"
+   },
+   {
+    "sid": "nB038",
+    "who": "them"
+   },
+   {
+    "sid": "nA048",
+    "who": "you"
+   },
+   {
+    "sid": "nS001",
+    "who": "them"
+   },
+   {
+    "sid": "nB073",
+    "who": "them"
+   },
+   {
+    "sid": "nS036",
+    "who": "you"
+   },
+   {
+    "sid": "nS037",
+    "who": "you"
+   },
+   {
+    "sid": "nB011",
+    "who": "them"
+   }
+  ]
+ },
+ {
+  "id": "sc07",
+  "title": "Paying the bill",
+  "en": "Settling up at the register.",
+  "lines": [
+   {
+    "sid": "s408",
+    "who": "you"
+   },
+   {
+    "sid": "nS038",
+    "who": "them"
+   },
+   {
+    "sid": "nB022",
+    "who": "them"
+   },
+   {
+    "sid": "nS039",
+    "who": "you"
+   },
+   {
+    "sid": "nB018",
+    "who": "them"
+   },
+   {
+    "sid": "nD091",
+    "who": "you"
+   },
+   {
+    "sid": "nS040",
+    "who": "them"
+   },
+   {
+    "sid": "nS029",
+    "who": "you"
+   },
+   {
+    "sid": "nB026",
+    "who": "them"
+   },
+   {
+    "sid": "nA123",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc08",
+  "title": "Asking directions",
+  "en": "Finding the subway on foot.",
+  "lines": [
+   {
+    "sid": "s207",
+    "who": "you"
+   },
+   {
+    "sid": "s218",
+    "who": "them"
+   },
+   {
+    "sid": "s488",
+    "who": "them"
+   },
+   {
+    "sid": "nS019",
+    "who": "you"
+   },
+   {
+    "sid": "s023",
+    "who": "them"
+   },
+   {
+    "sid": "nG024",
+    "who": "them"
+   },
+   {
+    "sid": "nS010",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc09",
+  "title": "At the pharmacy",
+  "en": "A headache and a fever, over the counter.",
+  "lines": [
+   {
+    "sid": "nC096",
+    "who": "you"
+   },
+   {
+    "sid": "nS020",
+    "who": "you"
+   },
+   {
+    "sid": "nB076",
+    "who": "them"
+   },
+   {
+    "sid": "nS012",
+    "who": "you"
+   },
+   {
+    "sid": "nS041",
+    "who": "them"
+   },
+   {
+    "sid": "nS042",
+    "who": "you"
+   },
+   {
+    "sid": "nS013",
+    "who": "them"
+   },
+   {
+    "sid": "nS014",
+    "who": "you"
+   },
+   {
+    "sid": "nS043",
+    "who": "them"
+   },
+   {
+    "sid": "nS010",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc10",
+  "title": "Shopping",
+  "en": "Sizes, the price and paying.",
+  "lines": [
+   {
+    "sid": "nB009",
+    "who": "them"
+   },
+   {
+    "sid": "nA006",
+    "who": "you"
+   },
+   {
+    "sid": "nS045",
+    "who": "them"
+   },
+   {
+    "sid": "nS046",
+    "who": "you"
+   },
+   {
+    "sid": "nS023",
+    "who": "them"
+   },
+   {
+    "sid": "nD091",
+    "who": "you"
+   },
+   {
+    "sid": "nS025",
+    "who": "them"
+   },
+   {
+    "sid": "nB028",
+    "who": "them"
+   },
+   {
+    "sid": "nB034",
+    "who": "them"
+   },
+   {
+    "sid": "nA123",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc11",
+  "title": "Lost in town",
+  "en": "Asking a stranger for the police box.",
+  "lines": [
+   {
+    "sid": "nA043",
+    "who": "you"
+   },
+   {
+    "sid": "nA097",
+    "who": "you"
+   },
+   {
+    "sid": "nS016",
+    "who": "them"
+   },
+   {
+    "sid": "s218",
+    "who": "them"
+   },
+   {
+    "sid": "nS048",
+    "who": "you"
+   },
+   {
+    "sid": "nS016",
+    "who": "them"
+   },
+   {
+    "sid": "nS010",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc12",
+  "title": "Hotel checkout",
+  "en": "Leaving, paying and storing bags.",
+  "lines": [
+   {
+    "sid": "nS011",
+    "who": "you"
+   },
+   {
+    "sid": "nS049",
+    "who": "them"
+   },
+   {
+    "sid": "nB022",
+    "who": "them"
+   },
+   {
+    "sid": "nD091",
+    "who": "you"
+   },
+   {
+    "sid": "nB028",
+    "who": "them"
+   },
+   {
+    "sid": "nA103",
+    "who": "you"
+   },
+   {
+    "sid": "nB052",
+    "who": "them"
+   },
+   {
+    "sid": "nB011",
+    "who": "them"
+   },
+   {
+    "sid": "nS050",
+    "who": "them"
+   }
+  ]
+ },
+ {
+  "id": "sc02",
+  "title": "Train to the airport",
+  "en": "At the counter for the airport express on the way home.",
+  "lines": [
+   {
+    "sid": "nA024",
+    "who": "you"
+   },
+   {
+    "sid": "nS024",
+    "who": "them"
+   },
+   {
+    "sid": "nA025",
+    "who": "you"
+   },
+   {
+    "sid": "nB024",
+    "who": "them"
+   },
+   {
+    "sid": "nD091",
+    "who": "you"
+   },
+   {
+    "sid": "nS025",
+    "who": "them"
+   },
+   {
+    "sid": "nB028",
+    "who": "them"
+   },
+   {
+    "sid": "nS026",
+    "who": "you"
+   },
+   {
+    "sid": "nB078",
+    "who": "them"
+   },
+   {
+    "sid": "nS010",
+    "who": "you"
+   }
+  ]
+ }
+]
