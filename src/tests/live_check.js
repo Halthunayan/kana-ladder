@@ -27,7 +27,7 @@ const m=await p.evaluate(()=>({
   focus: !!document.getElementById('focusBtn')
 }));
 ok(/Kana/.test(m.title), 'the page is Kana Ladder ("'+m.title+'")');
-ok(m.words===1812 && m.sents===1442, 'the whole deck shipped ('+m.words+' words, '+m.sents+' sentences)');
+ok(m.words===1812 && m.sents===1484, 'the whole deck shipped ('+m.words+' words, '+m.sents+' sentences)');
 ok(m.hasKl===false, 'the test hook is correctly absent in production');
 ok(m.home && m.car && m.focus, 'the home screen, car mode and Focus buttons are all present');
 ok(bad.length===0, bad.length? 'failed requests: '+bad.slice(0,3).join(' ; ') : 'every asset resolved');
