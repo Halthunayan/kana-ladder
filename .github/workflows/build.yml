@@ -132,6 +132,12 @@ jobs:
       - name: the Japanese voice is ranked, and the robot never speaks
         run: node src/tests/voice_rank.js
 
+      # A scene is rehearsed out loud and graded by what the phone heard. The
+      # recogniser is scripted here, so what is asserted is the flow, the
+      # grading and the readiness rule, not the microphone.
+      - name: scenes play, listen and grade
+        run: node src/tests/scenes.js
+
       # Twice in one day the app went silent in both languages while the
       # pre-rendered audio kept playing, and nine suites stayed green. Both
       # times the cause was code added to the speech path that called cancel
