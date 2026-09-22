@@ -119,6 +119,31 @@ ok(manual.usable===true,'Japanese is judged speakable when the engine is alive')
 ok(manual.spoke[0]==='\u3088\u3093','and the device speaks it ('+JSON.stringify(manual.spoke)+')');
 ok(manual.clips.length===0,'without touching the library ('+JSON.stringify(manual.clips)+')');
 
+console.log('\n4b. a conjugation card reaches the library like any other card');
+/* Conjugation cards were the one kind that never had a clip: clipFor returned
+   null for them and they went straight to the device voice, which on his phone
+   is silence. Car mode already renders every form of every word, so the card
+   now finds its form by kana in the word's own table, and the dictionary form
+   it is asked from plays the word's own clip. */
+const conj=await p.evaluate(async()=>{
+  const k=window.__kl; const g=k.CONJ[0]; const out={id:g.id, kana:g.kana, base:g.base};
+  out.clip=k.clipFor(g); out.baseClip=k.baseClipFor(g);
+  k.AUD.log.length=0; window.__spoke=[];
+  k.speakCard(g); await new Promise(r=>setTimeout(r,800));
+  out.played=k.AUD.log.map(x=>x.k); out.spoke=window.__spoke.slice();
+  k.AUD.log.length=0; window.__spoke=[];
+  k.speakBase(g); await new Promise(r=>setTimeout(r,800));
+  out.basePlayed=k.AUD.log.map(x=>x.k); out.baseSpoke=window.__spoke.slice();
+  const missing=k.CONJ.filter(x=>!k.clipFor(x)).map(x=>x.id);
+  out.missing=missing;
+  return out;
+});
+ok(/^fj:c\d{4}:\d+$/.test(conj.clip||''),'the card maps to a form clip ('+conj.clip+')');
+ok(conj.played.indexOf(conj.clip)>=0,'and speaking the card plays that clip ('+JSON.stringify(conj.played)+')');
+ok(conj.spoke.every(t=>t===conj.kana),'any device fallback says the form itself ('+JSON.stringify(conj.spoke)+')');
+ok(conj.basePlayed.indexOf(conj.baseClip)>=0,'the dictionary form plays the word\'s own clip ('+JSON.stringify(conj.basePlayed)+')');
+ok(conj.missing.length===0,'every one of the '+40+' conjugation cards has a clip ('+JSON.stringify(conj.missing)+')');
+
 console.log('\n5. the spoken form is shown to the reader, and only where it is not the answer');
 const html=await p.evaluate(()=>{
   const k=window.__kl;

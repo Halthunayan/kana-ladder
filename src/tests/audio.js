@@ -47,8 +47,14 @@ const spoken=()=>p.evaluate(()=>{
   const out=window.__spoken.map(x=>({t:x.t, r:x.r, v:x.v, via:'voice'}));
   for(const e of (__kl.AUD.log||[])){
     const parts=(e.k||'').split(':');
-    const c=__kl.IDX[parts[1]] || (__kl.SENT||[]).find(x=>x.id===parts[1]);
-    out.push({t: c? c.kana : e.k, r:1, v:null, via:'clip'});
+    let t=e.k;
+    if(parts[0]==='fj'){                       // a conjugated form: text is in the word's table
+      const row=(__kl.FORMS||{})[parts[1]]||[]; t=row[(+parts[2])*3+1]||e.k;
+    } else {
+      const c=__kl.IDX[parts[1]] || (__kl.SENT||[]).find(x=>x.id===parts[1]);
+      t=c? c.kana : e.k;
+    }
+    out.push({t:t, r:e.pb||1, v:null, via:'clip'});
   }
   return out;
 });
@@ -69,6 +75,11 @@ if(info.dir==='j' && !info.conj){
 } else { console.log('   SKIP  first card was not a plain JP to EN card'); }
 
 console.log('\n2. rate is jittered, and no voice is named');
+/* Jitter belongs to the device voice: a clip plays at the rate the card asks
+   for and nothing else. The library is the voice on cards now, so this section
+   puts the device voice back in front for its own run, which is the thing it
+   was written to check. */
+await p.evaluate(()=>{ __kl.S.settings.cardAudio=false; });
 await clear();
 for(let i=0;i<8;i++){
   const s=await p.$('#showBtn'); if(s&&await s.isVisible()){await s.click();await p.waitForTimeout(40);}
@@ -85,6 +96,7 @@ ok(rates.length>1,'playback rate varies across cards: '+rates.join(', '));
 ok(voices.every(v=>!v),'no card names a voice, leaving the choice to the engine: '+JSON.stringify(voices));
 ok(all.every(x=>x.r>=0.70 && x.r<=1.00),'every rate stayed inside the expected band');
 
+await p.evaluate(()=>{ __kl.S.settings.cardAudio=true; });
 console.log('\n3. an English to Japanese card stays silent until the answer');
 {
 const ctx2=await b.newContext({viewport:{width:393,height:852}});
@@ -140,14 +152,14 @@ await p3.evaluate(()=>{ __kl.TTS.ja=true; __kl.TTS.voices=speechSynthesis.getVoi
 await p3.click('#startBtn'); await p3.waitForTimeout(500);
 const c=await p3.evaluate(()=>{const x=__kl.cardOf(__kl.sess().key);
   return {conj:__kl.isConj(x), base:x.base, ans:x.kana,
-          spoken:window.__spoken.concat((__kl.AUD.log||[]).map(y=>{const c=__kl.IDX[(y.k||'').split(':')[1]]; return {t:c?c.kana:y.k};}))};});
+          spoken:window.__spoken.concat((__kl.AUD.log||[]).map(y=>{const q=(y.k||'').split(':'); if(q[0]==='fj'){const row=(__kl.FORMS||{})[q[1]]||[]; return {t:row[(+q[2])*3+1]||y.k};} const c=__kl.IDX[q[1]]; return {t:c?c.kana:y.k};}))};});
 ok(c.conj,'a conjugation anchor was served');
 if(c.conj){
   console.log('   base '+c.base+' / answer '+c.ans+' -> spoke '+JSON.stringify(c.spoken.map(s=>s.t)));
   ok(c.spoken.length===1 && c.spoken[0].t===c.base,'it played the dictionary form');
   ok(!c.spoken.some(s=>s.t===c.ans),'it did not leak the answer');
   await p3.click('#showBtn'); await p3.waitForTimeout(300);
-  const after=await p3.evaluate(()=>window.__spoken.concat((__kl.AUD.log||[]).map(y=>{const c=__kl.IDX[(y.k||'').split(':')[1]]; return {t:c?c.kana:y.k};})));
+  const after=await p3.evaluate(()=>window.__spoken.concat((__kl.AUD.log||[]).map(y=>{const q=(y.k||'').split(':'); if(q[0]==='fj'){const row=(__kl.FORMS||{})[q[1]]||[]; return {t:row[(+q[2])*3+1]||y.k};} const c=__kl.IDX[q[1]]; return {t:c?c.kana:y.k};})));
   ok(after.some(s=>s.t===c.ans),'the conjugated form is read once revealed');
 }
 await ctx3.close();
