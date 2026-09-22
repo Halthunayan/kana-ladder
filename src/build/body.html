@@ -55,6 +55,10 @@
         <span class="pd" id="carBtnSub">hands free, audio only</span>
       </button>
     </div>
+    <button class="pracbtn scenes" id="scenesBtn">
+      <span class="pn">Scenes</span>
+      <span class="pd" id="scenesBtnSub">rehearse a real exchange, the phone listens</span>
+    </button>
     <div class="opt" style="border-bottom:none;padding-bottom:2px">
       <div><div class="t">No new words today</div><div class="d">Keeps the scheduled reviews, holds back everything new until tomorrow.</div></div>
       <button class="sw" id="noNewSw" role="switch" aria-checked="false" aria-label="No new words today"></button>
@@ -97,6 +101,53 @@
 </section>
 
 <!-- ============ CAR ============ -->
+
+<section class="screen" id="s-scenes">
+  <div class="scwrap">
+    <div class="scbar">
+      <button class="btn btn-ghost" id="scBack">Back</button>
+      <span class="scprog" id="scProg"></span>
+    </div>
+    <div id="scPick">
+      <h2 class="sch">Scenes</h2>
+      <p class="fine">A short real exchange, both sides. Listen plays it through. Rehearse plays their lines and waits for yours: say the line, the phone hears it and tells you how close you were. A scene opens once you know its words, one new word per line at most.</p>
+      <div class="sclist" id="scList"></div>
+    </div>
+    <div id="scOne" hidden>
+      <h2 class="sch" id="scTitle"></h2>
+      <p class="fine" id="scSub"></p>
+      <div id="scBrief">
+        <p class="scgaphead" id="scGapHead"></p>
+        <div class="scgaps" id="scGaps"></div>
+        <button class="btn btn-ghost" id="scWant" hidden>Learn these first</button>
+        <div class="sclines" id="scLines"></div>
+        <p class="fine" id="scMicNote"></p>
+        <div class="scacts">
+          <button class="btn btn-ghost" id="scListen">Listen</button>
+          <button class="btn" id="scRehearse">Rehearse</button>
+        </div>
+      </div>
+      <div id="scStage" hidden>
+        <div class="scwho" id="scWho"></div>
+        <div class="scen" id="scEn"></div>
+        <div class="scrm" id="scRm"></div>
+        <div class="scstate" id="scState"></div>
+        <div class="scheard" id="scHeard"></div>
+        <button class="btn btn-ghost scmic" id="scMicBtn" hidden>Tap, then speak</button>
+        <button class="btn btn-ghost scstop" id="scStop">Stop</button>
+      </div>
+      <div id="scDone" hidden>
+        <h2 id="scDoneHead"></h2>
+        <p class="fine" id="scDoneSub"></p>
+        <div class="screslist" id="scDoneList"></div>
+        <div class="scacts">
+          <button class="btn btn-ghost" id="scDoneBtn">Done</button>
+          <button class="btn" id="scAgain">Again</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 <section class="screen" id="s-car">
   <div class="carwrap">
     <div class="carbar">
@@ -345,8 +396,8 @@
       <button class="sw" id="setCarAudio" role="switch" aria-checked="true" aria-label="Downloaded voice"></button>
     </div>
     <div class="opt">
-      <div><div class="t">Use the downloaded voice on cards too</div><div class="d">Off by default, and it should stay off. Your phone's own Japanese voice reads the cards, because the downloaded one is a small model that mispronounces a word said on its own. Turn this on only if your phone has no Japanese voice, or if you want every card to sound exactly like the car.</div></div>
-      <button class="sw" id="setCardAudio" role="switch" aria-checked="false" aria-label="Use the downloaded voice on cards too"></button>
+      <div><div class="t">Use the downloaded voice on cards too</div><div class="d">On by default. The downloaded voice reads cards, examples and conjugations, the same voice as the car, and every clip was checked by machine transcription before it shipped. Turn this off to use your phone's own Japanese voice instead, if it works on your phone.</div></div>
+      <button class="sw" id="setCardAudio" role="switch" aria-checked="true" aria-label="Use the downloaded voice on cards too"></button>
     </div>
     <div class="opt">
       <div><div class="t">Download for the words in rotation</div><div class="d">Fetches only the audio a drive can reach, not the whole deck. Do it on wifi.</div></div>

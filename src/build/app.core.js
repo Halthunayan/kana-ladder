@@ -51,7 +51,7 @@ var LEARN = [60, 600], RELEARN = [600], SHARDS = 8, LS_KEY = "kanaladder.v1";
 var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, cardAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto"};
 
 var S = {rev:0, items:{}, settings:Object.assign({},DEFAULTS),
-  daily:{key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,noNew:false,buried:{},done:{},missed:{}}, hist:{}, streak:{cur:0,best:0,last:""}, life:{ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{}, checks:[], log:[]};
+  daily:{key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,noNew:false,buried:{},done:{},missed:{}}, hist:{}, streak:{cur:0,best:0,last:""}, life:{ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{}, checks:[], log:[], scenes:{}, want:[]};
 
 /* ---------- time ---------- */
 function dayKey(t){var d=new Date(t-14400000);
@@ -230,7 +230,7 @@ function unpackItem(a){
    The stamp lets the importer say so instead. */
 var SCHEMA=6;
 function packAll(){var it={}; for(var k in S.items) it[k]=packItem(S.items[k]);
-  return {schema:SCHEMA,rev:S.rev,settings:S.settings,daily:S.daily,hist:S.hist,streak:S.streak,life:S.life,backup:S.backup,notes:S.notes,susp:S.susp,pfail:S.pfail,crep:S.crep,carSeen:S.carSeen,checks:S.checks,log:S.log,items:it};}
+  return {schema:SCHEMA,rev:S.rev,settings:S.settings,daily:S.daily,hist:S.hist,streak:S.streak,life:S.life,backup:S.backup,notes:S.notes,susp:S.susp,pfail:S.pfail,crep:S.crep,carSeen:S.carSeen,checks:S.checks,log:S.log,scenes:S.scenes||{},want:S.want||[],items:it};}
 function applyBlob(b){
   if(!b) return;
   S.rev = b.rev||0;
@@ -243,6 +243,7 @@ function applyBlob(b){
   S.life = Object.assign({ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0},b.life||{});
   S.backup = Object.assign({last:""},b.backup||{});
   S.notes = b.notes||{}; S.susp = b.susp||{}; S.pfail = b.pfail||{}; S.crep = b.crep||{}; S.carSeen = b.carSeen||{};
+  S.scenes = b.scenes||{}; S.want = Array.isArray(b.want)? b.want : [];
   S.checks = Array.isArray(b.checks)? b.checks : [];
   S.log = Array.isArray(b.log) ? b.log : [];
   S.items = {}; var it=b.items||{};
@@ -651,6 +652,17 @@ function pools(){
   for(var m=0;m<INTRO.length;m++){ var jj=INTRO[m].id+"|j";
     if(INTRO[m].dup) continue;                  // the same word written another way
     if(!S.items[jj] && usable(jj)) nw.push(jj); }
+  /* A scene he chose to rehearse can ask for its missing words first. They
+     keep their place among themselves and everything else keeps the
+     introduction order behind them; a word already introduced drops off. */
+  if(S.want && S.want.length){
+    var pri={}; S.want.forEach(function(id,i){ pri[id]=i; });
+    nw.sort(function(a,b){
+      var pa=pri[a.split("|")[0]], pb=pri[b.split("|")[0]];
+      pa = pa===undefined ? 1e9 : pa; pb = pb===undefined ? 1e9 : pb;
+      return pa-pb;
+    });
+  }
   // sentences have their own small budget, and only open once their words are known
   if(S.settings.sentences!==false){
     sentQueueOrder();
@@ -1713,9 +1725,36 @@ function speak(text){
 function clipFor(c){
   if(!c) return null;
   if(isSent(c)) return "sj:"+c.id;
-  if(isConj(c)) return null;
+  /* A conjugation card shows one form of one word, and car mode already has a
+     clip for every form of every word it drills. Until now these cards were
+     the one kind that never reached the library and went straight to the
+     device voice, which on his phone means silence. The form is found by its
+     kana in the word's own table, so a card whose form is not there simply
+     falls back as before. */
+  if(isConj(c)){
+    var wid=c.w&&c.w[0], row=wid&&FORMS[wid];
+    if(row) for(var k=0;k*3+1<row.length;k++) if(row[k*3+1]===c.kana) return "fj:"+wid+":"+k;
+    return null;
+  }
   if(c.practiceOnly) return null;
   return "wj:"+c.id;
+}
+/* The dictionary form a conjugation card is asked from. Same rule as the card
+   itself: the library first, the device voice only when there is no clip. */
+function baseClipFor(c){ return (isConj(c) && c.w && c.w[0]) ? "wj:"+c.w[0] : null; }
+function speakBase(c){
+  if(!c) return;
+  var key=baseClipFor(c);
+  if(key && audOn() && S.settings.cardAudio!==false){
+    var g=++SAY_GEN;
+    audStop();
+    audPlay(key, 1, function(){ return g===SAY_GEN; }).then(function(ok){
+      if(!ok && g===SAY_GEN) speak(c.base);
+    });
+    return;
+  }
+  SAY_GEN++;
+  speak(c.base);
 }
 /* Every call supersedes the last. speakAt already cancels the device voice, but
    a clip has to be fetched first and that takes time: answer the card while its
@@ -2040,7 +2079,7 @@ function renderCard(){
      started it. A conjugation card plays its dictionary form, never the answer. */
   if(S.settings.tts && S.settings.autoPlay!==false){
     if(d==="a") speakCard(c);
-    else if(isConj(c)) speak(c.base);
+    else if(isConj(c)) speakBase(c);
     else if(d==="j") speakCard(c);
   }
 }
@@ -3493,6 +3532,7 @@ function stateOf(it){
 }
 function render(){
   rollDay();
+  scenePruneWant();
   var c=counts();
   setTile("tileNew",c.newN); setTile("tileLrn",c.lrnN); setTile("tileDue",c.dueN);
   var total=c.newN+c.lrnN+c.dueN;
@@ -3608,6 +3648,9 @@ function renderPracticePanel(){
       "Settings, Accessibility, Spoken Content, Voices, Japanese, then download a voice and reopen this app. "+
       "Downloading the pre-rendered voice in Settings also brings them back.";
   }
+  var sb=document.getElementById("scenesBtnSub");
+  if(sb){ var rdy=0; for(var si=0;si<SCENES.length;si++) if(sceneReady(SCENES[si])) rdy++;
+    sb.textContent = rdy ? rdy+" of "+SCENES.length+" ready to rehearse" : "learn a few words first"; }
   var cb=document.getElementById("carBtn"), cs=document.getElementById("carBtnSub");
   if(cb){
     var words=0;
@@ -4289,7 +4332,7 @@ function storageReport(){
 /* ---------- shell ---------- */
 function go(name){
   if(SHEET) closeSheet();
-  ["home","review","browse","stats","set","car","check"].forEach(function(n){
+  ["home","review","browse","stats","set","car","check","scenes"].forEach(function(n){
     document.getElementById("s-"+n).classList.toggle("on",n===name);
   });
   Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){
@@ -4348,7 +4391,7 @@ function bind(){
   setInterval(function(){ if(!Sess.on) render(); },60000);
 }
 
-loadLocal(); rollDay(); applySettings(); bind(); bindSettings(); bindCar(); render(); renderBrowse(); setSync("local"); storageReport(); ttsProbe(); initStorage();
+loadLocal(); rollDay(); applySettings(); bind(); bindSettings(); bindCar(); bindScenes(); render(); renderBrowse(); setSync("local"); storageReport(); ttsProbe(); initStorage();
 /* Warm the manifest at boot so the first card does not pay for the round trip.
    It is one small network-first JSON, and audPlay no longer depends on anyone
    having done this, so a failure here costs nothing. */
@@ -4361,7 +4404,7 @@ if("serviceWorker" in navigator){
       CAR:CAR, carWords:carWords, carStart:carStart, carBegin:carBegin, carPick:carPick,
       carAdvance:carAdvance, carSkip:carSkip, carRepeat:carRepeat, carPause:carPause,
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
-      carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
+      carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, speakBase:speakBase, baseClipFor:baseClipFor, SCENES:SCENES, sceneReady:sceneReady, sceneGaps:sceneGaps, sceneGrade:sceneGrade, kanaKey:kanaKey, kanaToRomaji:kanaToRomaji, kanjiToKana:kanjiToKana, scenesStart:scenesStart, sceneOpen:sceneOpen, sceneRun:sceneRun, sceneWant:sceneWant, SC:SC, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, ttsUsable:ttsUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,

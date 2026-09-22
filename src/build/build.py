@@ -7,6 +7,15 @@ style=open(B+'style.css',encoding='utf-8').read()
 fonts=open(B+'fonts.css',encoding='utf-8').read()
 body=open(B+'body.html',encoding='utf-8').read()
 js=open(B+'app.core.js',encoding='utf-8').read()
+# Scenes live in their own file so the feature can be read as one piece; the
+# duplicate-declaration guard below runs over the joined script.
+# app.core.js is one closure, so the scenes module is spliced in before its
+# boot line rather than appended after it: inside the scope, ahead of the first
+# render, which reads the scene data.
+_boot='loadLocal(); rollDay(); applySettings();'
+assert js.count(_boot)==1, 'the boot line moved; scenes.js needs a place inside the closure before it'
+js=js.replace(_boot, open(B+'scenes.js',encoding='utf-8').read()+'\n'+_boot, 1)
+scenes_src=open(R('scenes','scenes.json'),encoding='utf-8').read()
 _audio_ok = os.path.exists(R('pwa','audio','v1','manifest.json'))
 js=js.replace('__AUDIO_SHIPPED__', 'true' if _audio_ok else 'false')
 deck=open(R('deck', 'deck_full.json'),encoding='utf-8').read()
@@ -153,6 +162,43 @@ for _wid, _row in _fm.items():
             'generated form %s does not match its romaji: %s / %s' % (_wid, _row[_i+1], _row[_i+2])
         _forms_n += 1
 
+# ---- guard: any deck word a sentence uses has to be one of its words ----
+# The adjective check above catches inflection. This one catches the plain case:
+# a noun, adjective, adverb or pronoun standing in the sentence exactly as its
+# card writes it, or a verb in any form its own table lists, with no link. A
+# token already covered by a linked card (onegai inside a linked "onegai
+# shimasu", hana the flower when hana the flower is linked) is not a gap, and a
+# homonym of a linked card is not either. Matching is on whole romaji tokens,
+# because kana substrings match inside other words and romaji tokens do not.
+_forms_all=_j.loads(forms)
+def _toks(t): return [w for w in _re1.split(r"[^a-z']+", (t or '').lower()) if w]
+_surf={}
+for _cd in _d:
+    _r=(_cd.get('romaji') or '').lower()
+    if not _r or ' ' in _r or len(_r)<4: continue
+    if _cd.get('pos') in ('particle','expr','interj','conj','counter','num'): continue
+    _surf.setdefault(_r,set()).add(_cd['id'])
+for _wid,_row in _forms_all.items():
+    _card=next((cc for cc in _d if cc['id']==_wid), None)
+    if not _card or _card.get('pos')!='verb': continue
+    for _i in range(len(_row)//3):
+        _r=(_row[_i*3+2] or '').lower()
+        if _r and ' ' not in _r and len(_r)>=4: _surf.setdefault(_r,set()).add(_wid)
+_byid={cc['id']:cc for cc in _d}
+_gaps2=[]
+for _x in _s:
+    _linked=set(_x.get('w') or [])
+    _covered=set()
+    for _w in _linked:
+        if _w in _byid: _covered|=set(_toks(_byid[_w].get('romaji')))
+    for _t in _toks(_x.get('romaji')):
+        if _t in _surf and _t not in _covered and not (_surf[_t] & _linked):
+            _gaps2.append('%s uses %s' % (_x['id'], _t))
+if _gaps2:
+    raise SystemExit('these sentences use a deck word they do not list, so the '
+                     'readability gate cannot count it: ' + ', '.join(sorted(set(_gaps2))[:12]) +
+                     (' and %d more' % (len(set(_gaps2))-12) if len(set(_gaps2))>12 else ''))
+
 # ---- guard: every word carries one worked example, and it resolves ----
 # A word on its own teaches recognition and nothing about use. Every word card
 # now shows one sentence on its back. Where the deck already has a sentence the
@@ -236,6 +282,43 @@ print('examples: %d words, %d pointing at a deck sentence, %d written inline'
       % (len(_page_ex), sum(1 for _v in _page_ex.values() if isinstance(_v, str)),
          sum(1 for _v in _page_ex.values() if not isinstance(_v, str))))
 
+# ---- guard: a scene is made of sentences that exist, and has a part for him ----
+_scenes=_j.loads(scenes_src)
+_sid={x['id'] for x in _s}
+for _sc in _scenes:
+    assert _sc.get('id') and _sc.get('title') and _sc.get('lines'), 'scene without id, title or lines: %r' % _sc.get('id')
+    for _l in _sc['lines']:
+        assert _l['sid'] in _sid, 'scene %s names a sentence that does not exist: %s' % (_sc['id'], _l['sid'])
+        assert _l['who'] in ('you','them'), 'scene %s line %s has no speaker' % (_sc['id'], _l['sid'])
+    assert any(_l['who']=='you' for _l in _sc['lines']), 'scene %s has no line for him to say' % _sc['id']
+    assert len(_sc['lines'])<=11, 'scene %s is too long to rehearse (%d lines)' % (_sc['id'], len(_sc['lines']))
+_scene_ids=[_sc['id'] for _sc in _scenes]
+assert len(set(_scene_ids))==len(_scene_ids), 'duplicate scene id'
+scenes_src=_j.dumps(_scenes, ensure_ascii=False, separators=(',', ':'))
+
+# ---- the kanji reading table for grading speech ----
+# The phone's recogniser writes kanji. The learner's targets are kana. Every
+# deck card that has a kanji spelling gives one replacement, and a stem pair
+# besides so conjugated forms convert too: 使う / つかう yields 使 -> つか, which
+# turns 使えます into つかえます. Longest spelling first, so a longer match is
+# never broken by a shorter one inside it.
+_hira=lambda ch: '\u3041'<=ch<='\u3096' or ch in 'ー'
+_kmap={}
+def _put(k,v):
+    if k and v and k!=v and k not in _kmap: _kmap[k]=v
+for _c in _d:
+    _kj,_kn=_c.get('kanji') or '',_c.get('kana') or ''
+    if not _kj or _kj==_kn: continue
+    _put(_kj,_kn)
+    # strip the common trailing kana (okurigana) to get a stem pair
+    _n=0
+    while _n<min(len(_kj),len(_kn)) and _kj[-1-_n]==_kn[-1-_n] and _hira(_kj[-1-_n]): _n+=1
+    if _n and len(_kj)-_n>0 and len(_kn)-_n>0:
+        _put(_kj[:len(_kj)-_n], _kn[:len(_kn)-_n])
+_kanji_tbl=sorted(_kmap.items(), key=lambda kv: -len(kv[0]))
+kanji_src=_j.dumps(_kanji_tbl, ensure_ascii=False, separators=(',', ':'))
+print('scenes: %d scenes, %d lines; kanji readings: %d' % (len(_scenes), sum(len(x['lines']) for x in _scenes), len(_kanji_tbl)))
+
 print('guards passed: %d words, %d sentences, %d anchors, %d generated forms, all romaji verified'
       % (len(_d), len(_s), len(_cj), _forms_n))
 
@@ -244,6 +327,8 @@ tail=('\n<script type="application/json" id="deck-data">'+deck+'</script>'
       '\n<script type="application/json" id="conj-data">'+conj+'</script>'
       '\n<script type="application/json" id="forms-data">'+forms+'</script>'
       '\n<script type="application/json" id="example-data">'+examples+'</script>'
+      '\n<script type="application/json" id="scenes-data">'+scenes_src+'</script>'
+      '\n<script type="application/json" id="kanji-data">'+kanji_src+'</script>'
       '\n<script>\n'+js+'\n</script>\n')
 
 # ---- PWA: complete standalone document ----
