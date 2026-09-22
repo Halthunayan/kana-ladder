@@ -4332,7 +4332,7 @@ function storageReport(){
 /* ---------- shell ---------- */
 function go(name){
   if(SHEET) closeSheet();
-  ["home","review","browse","stats","set","car","check","scenes"].forEach(function(n){
+  ["home","review","browse","stats","set","car","check","scenes","speak"].forEach(function(n){
     document.getElementById("s-"+n).classList.toggle("on",n===name);
   });
   Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){
@@ -4391,7 +4391,7 @@ function bind(){
   setInterval(function(){ if(!Sess.on) render(); },60000);
 }
 
-loadLocal(); rollDay(); applySettings(); bind(); bindSettings(); bindCar(); bindScenes(); render(); renderBrowse(); setSync("local"); storageReport(); ttsProbe(); initStorage();
+loadLocal(); rollDay(); applySettings(); bind(); bindSettings(); bindCar(); bindScenes(); bindSpeaking(); render(); renderBrowse(); setSync("local"); storageReport(); ttsProbe(); initStorage();
 /* Warm the manifest at boot so the first card does not pay for the round trip.
    It is one small network-first JSON, and audPlay no longer depends on anyone
    having done this, so a failure here costs nothing. */
@@ -4406,6 +4406,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, speakBase:speakBase, baseClipFor:baseClipFor, SCENES:SCENES, sceneReady:sceneReady, sceneGaps:sceneGaps, sceneGrade:sceneGrade, kanaKey:kanaKey, kanaToRomaji:kanaToRomaji, kanjiToKana:kanjiToKana, scenesStart:scenesStart, sceneOpen:sceneOpen, sceneRun:sceneRun, sceneWant:sceneWant, SC:SC, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
+      speakingWords:speakingWords, speakingStart:speakingStart, spAsk:spAsk, spGradeJa:spGradeJa, enGrade:enGrade, enAlts:enAlts, SP:SP, go:go,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, ttsUsable:ttsUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,

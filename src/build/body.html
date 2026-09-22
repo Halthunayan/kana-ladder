@@ -59,6 +59,10 @@
       <span class="pn">Scenes</span>
       <span class="pd" id="scenesBtnSub">rehearse a real exchange, the phone listens</span>
     </button>
+    <button class="pracbtn speak" id="speakBtn">
+      <span class="pn">Speaking</span>
+      <span class="pd">say back the words Focus is asking about, the phone grades you</span>
+    </button>
     <div class="opt" style="border-bottom:none;padding-bottom:2px">
       <div><div class="t">No new words today</div><div class="d">Keeps the scheduled reviews, holds back everything new until tomorrow.</div></div>
       <button class="sw" id="noNewSw" role="switch" aria-checked="false" aria-label="No new words today"></button>
@@ -144,6 +148,34 @@
           <button class="btn btn-ghost" id="scDoneBtn">Done</button>
           <button class="btn" id="scAgain">Again</button>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SPEAKING ============ -->
+<section class="screen" id="s-speak">
+  <div class="scwrap">
+    <div class="scbar">
+      <button class="btn btn-ghost" id="spBack">Back</button>
+      <span class="scprog" id="spProg"></span>
+    </div>
+    <div class="sptiles" id="spTiles"></div>
+    <div id="spPeek" class="sppeek" hidden></div>
+    <div id="spStage">
+      <span class="chip dir-j" id="spDirChip">EN &rarr; JP, say it</span>
+      <div class="spprompt" id="spPrompt"></div>
+      <div class="spstate" id="spState"></div>
+      <div class="spheard" id="spHeard"></div>
+      <button class="btn btn-ghost scmic" id="spMicBtn" hidden>Tap, then speak</button>
+      <button class="btn btn-ghost scstop" id="spStop">Stop</button>
+    </div>
+    <div id="spDone" hidden>
+      <h2 id="spDoneHead"></h2>
+      <p class="fine" id="spDoneSub"></p>
+      <div class="scacts">
+        <button class="btn btn-ghost" id="spDoneBtn">Done</button>
+        <button class="btn" id="spAgain">Again</button>
       </div>
     </div>
   </div>

@@ -14,7 +14,12 @@ js=open(B+'app.core.js',encoding='utf-8').read()
 # render, which reads the scene data.
 _boot='loadLocal(); rollDay(); applySettings();'
 assert js.count(_boot)==1, 'the boot line moved; scenes.js needs a place inside the closure before it'
-js=js.replace(_boot, open(B+'scenes.js',encoding='utf-8').read()+'\n'+_boot, 1)
+# speaking.js is spliced in right after scenes.js: it calls scenes.js's own
+# listenOnce, kanaSim, kanaKey, kanaToRomaji and kanjiToKana rather than
+# duplicating them, so it has to live in the same closure, after the module
+# it borrows from.
+js=js.replace(_boot, open(B+'scenes.js',encoding='utf-8').read()+'\n'+
+                      open(B+'speaking.js',encoding='utf-8').read()+'\n'+_boot, 1)
 scenes_src=open(R('scenes','scenes.json'),encoding='utf-8').read()
 _audio_ok = os.path.exists(R('pwa','audio','v1','manifest.json'))
 js=js.replace('__AUDIO_SHIPPED__', 'true' if _audio_ok else 'false')

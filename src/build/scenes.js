@@ -131,15 +131,17 @@ function sceneGrade(target, alts){
 function recCtor(){ return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
 function recAvailable(){ return !!recCtor(); }
 /* One utterance. Resolves with {alts:[...]} or {alts:[], err:"..."}. Never
-   rejects, never hangs: a hard timeout stops it whatever the engine does. */
-function listenOnce(ms){
+   rejects, never hangs: a hard timeout stops it whatever the engine does.
+   lang defaults to Japanese; Speaking mode passes "en-US" for the half of its
+   questions that are answered in English. */
+function listenOnce(ms, lang){
   return new Promise(function(res){
     var C=recCtor(); if(!C){ res({alts:[], err:"unavailable"}); return; }
     var R, done=false, timer=null, alts=[];
     function fin(r){ if(done) return; done=true; if(timer) clearTimeout(timer); try{ R.abort(); }catch(e){} SC.rec=null; res(r); }
     try{
       R=new C(); SC.rec=R;
-      R.lang="ja-JP"; R.interimResults=false; R.maxAlternatives=5; R.continuous=false;
+      R.lang=lang||"ja-JP"; R.interimResults=false; R.maxAlternatives=5; R.continuous=false;
       R.onresult=function(e){
         try{ var rs=e.results[e.results.length-1];
           for(var i=0;i<rs.length;i++){ if(rs[i] && rs[i].transcript) alts.push(rs[i].transcript); } }catch(x){}
