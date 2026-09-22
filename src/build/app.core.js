@@ -4171,6 +4171,13 @@ function bindSettings(){
     box.hidden=!box.hidden;
     this.textContent=box.hidden?"Show":"Hide";
   });
+  document.getElementById("micDiagBtn").addEventListener("click",function(){
+    var box=document.getElementById("micDiag");
+    if(!box) return;
+    box.textContent=micReport();
+    box.hidden=!box.hidden;
+    this.textContent=box.hidden?"Show":"Hide";
+  });
   document.getElementById("setEnVoice").addEventListener("change",function(){
     S.settings.enVoice=this.value; save(); renderEnVoicePicker();
     carSay("This is how the English side will sound.","en",1.0); });
@@ -4407,6 +4414,7 @@ if("serviceWorker" in navigator){
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, speakBase:speakBase, baseClipFor:baseClipFor, SCENES:SCENES, sceneReady:sceneReady, sceneGaps:sceneGaps, sceneGrade:sceneGrade, kanaKey:kanaKey, kanaToRomaji:kanaToRomaji, kanjiToKana:kanjiToKana, scenesStart:scenesStart, sceneOpen:sceneOpen, sceneRun:sceneRun, sceneWant:sceneWant, SC:SC, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
       speakingWords:speakingWords, speakingStart:speakingStart, spAsk:spAsk, spGradeJa:spGradeJa, enGrade:enGrade, enAlts:enAlts, SP:SP, go:go,
+      micReport:micReport, MIC_LOG:MIC_LOG, listenOnce:listenOnce, micPrime:micPrime, isStandalone:isStandalone,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, ttsUsable:ttsUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,

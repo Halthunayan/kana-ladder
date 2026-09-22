@@ -130,29 +130,100 @@ function sceneGrade(target, alts){
 /* ---- the phone listens ---- */
 function recCtor(){ return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
 function recAvailable(){ return !!recCtor(); }
+
+/* A running log of every listen attempt, read-only from Settings. This exists
+   because of a documented WebKit bug (bugs.webkit.org 321436, 225298): on
+   iOS, SpeechRecognition can silently stop delivering onresult/onerror/onend
+   at all right after an <audio> element has played, or in a home-screen
+   installed PWA specifically. The mic permission indicator still shows, so
+   there is nothing to see on screen; this log is the only way to tell "the
+   recognizer never started" apart from "it started and heard nothing" apart
+   from "it is not allowed to run here at all". Nothing in here listens back. */
+var MIC_LOG=[];
+function micNote(rec){ MIC_LOG.push(rec); if(MIC_LOG.length>20) MIC_LOG.shift(); }
+function isStandalone(){
+  try{ return window.matchMedia && window.matchMedia("(display-mode: standalone)").matches || navigator.standalone===true; }
+  catch(e){ return false; }
+}
+/* the last time any clip or TTS actually played, so a listen attempt can be
+   correlated against the WebKit "hangs right after audio" bug above */
+var LAST_AUDIO_AT=0;
+function noteAudioPlayed(){ LAST_AUDIO_AT=Date.now(); }
+
+/* Best known mitigation for the same WebKit bug: a short pause plus a
+   throwaway getUserMedia grab before starting the recognizer. Documented as
+   "partial, unreliable" relief by the people who filed the bug, not a fix -
+   it costs under a second and is cheap insurance either way. Never rejects. */
+function micPrime(delayMs){
+  return new Promise(function(res){
+    setTimeout(function(){
+      try{
+        if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+          navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+            stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+            res();
+          }, function(){ res(); });
+          return;
+        }
+      }catch(e){}
+      res();
+    }, delayMs||0);
+  });
+}
+
 /* One utterance. Resolves with {alts:[...]} or {alts:[], err:"..."}. Never
    rejects, never hangs: a hard timeout stops it whatever the engine does.
    lang defaults to Japanese; Speaking mode passes "en-US" for the half of its
    questions that are answered in English. */
 function listenOnce(ms, lang){
-  return new Promise(function(res){
-    var C=recCtor(); if(!C){ res({alts:[], err:"unavailable"}); return; }
-    var R, done=false, timer=null, alts=[];
-    function fin(r){ if(done) return; done=true; if(timer) clearTimeout(timer); try{ R.abort(); }catch(e){} SC.rec=null; res(r); }
-    try{
-      R=new C(); SC.rec=R;
-      R.lang=lang||"ja-JP"; R.interimResults=false; R.maxAlternatives=5; R.continuous=false;
-      R.onresult=function(e){
-        try{ var rs=e.results[e.results.length-1];
-          for(var i=0;i<rs.length;i++){ if(rs[i] && rs[i].transcript) alts.push(rs[i].transcript); } }catch(x){}
-        fin({alts:alts});
-      };
-      R.onerror=function(e){ fin({alts:alts, err:(e&&e.error)||"error"}); };
-      R.onend=function(){ fin(alts.length? {alts:alts} : {alts:[], err:"no-speech"}); };
-      R.start();
-      timer=setTimeout(function(){ try{ R.stop(); }catch(e){} setTimeout(function(){ fin(alts.length? {alts:alts} : {alts:[], err:"timeout"}); },400); }, ms||SC_LISTEN_MS);
-    }catch(e){ fin({alts:[], err:"start:"+(e&&e.message||e)}); }
+  var sinceAudio=Date.now()-LAST_AUDIO_AT;
+  return micPrime(320).then(function(){
+    return new Promise(function(res){
+      var C=recCtor();
+      if(!C){ micNote({at:Date.now(),lang:lang,sinceAudio:sinceAudio,standalone:isStandalone(),started:false,result:false,err:"unavailable"}); res({alts:[], err:"unavailable"}); return; }
+      var R, done=false, timer=null, alts=[], started=false, t0=Date.now();
+      function fin(r){
+        if(done) return; done=true; if(timer) clearTimeout(timer); try{ R.abort(); }catch(e){} SC.rec=null;
+        micNote({at:t0,lang:lang,sinceAudio:sinceAudio,standalone:isStandalone(),started:started,result:!!(r.alts&&r.alts.length),err:r.err||null,ms:Date.now()-t0});
+        res(r);
+      }
+      try{
+        R=new C(); SC.rec=R;
+        R.lang=lang||"ja-JP"; R.interimResults=false; R.maxAlternatives=5; R.continuous=false;
+        R.onstart=function(){ started=true; };
+        R.onresult=function(e){
+          try{ var rs=e.results[e.results.length-1];
+            for(var i=0;i<rs.length;i++){ if(rs[i] && rs[i].transcript) alts.push(rs[i].transcript); } }catch(x){}
+          fin({alts:alts});
+        };
+        R.onerror=function(e){ fin({alts:alts, err:(e&&e.error)||"error"}); };
+        R.onend=function(){ fin(alts.length? {alts:alts} : {alts:[], err:"no-speech"}); };
+        R.start();
+        timer=setTimeout(function(){ try{ R.stop(); }catch(e){} setTimeout(function(){ fin(alts.length? {alts:alts} : {alts:[], err:"timeout"}); },400); }, ms||SC_LISTEN_MS);
+      }catch(e){ fin({alts:[], err:"start:"+(e&&e.message||e)}); }
+    });
   });
+}
+/* Read-only report for Settings, mirroring speechReport()'s pattern for TTS.
+   Never starts a recognizer itself. */
+function micReport(){
+  var L=[], i, r;
+  L.push("recognizer: "+(recAvailable()?"present":"MISSING"));
+  L.push("running as: "+(isStandalone()?"installed, home screen":"a browser tab"));
+  L.push("");
+  L.push("last "+MIC_LOG.length+" attempts, newest last:");
+  if(!MIC_LOG.length) L.push("  nothing has listened yet");
+  for(i=0;i<MIC_LOG.length;i++){
+    r=MIC_LOG[i];
+    L.push("  lang:"+(r.lang||"ja-JP")
+      +"  since audio:"+(r.sinceAudio<0?"?":r.sinceAudio+"ms")
+      +"  standalone:"+(r.standalone?"yes":"no")
+      +"  started:"+(r.started?"yes":"NO")
+      +"  result:"+(r.result?"yes":"no")
+      +(r.err?("  err:"+r.err):"")
+      +(r.ms!=null?("  took:"+r.ms+"ms"):""));
+  }
+  return L.join("\n");
 }
 
 /* ---- audio for a line ---- */
@@ -162,6 +233,7 @@ function estSpeechMs(text){ return 600 + moraCount(text)*170; }
    the library has nothing, a timed pause if neither can play. */
 function scenePlay(x, gen){
   var alive=function(){ return gen===SC.gen; };
+  noteAudioPlayed();
   if(audOn() && S.settings.cardAudio!==false){
     return audPlay(sceneClipKey(x), 1, alive).then(function(ok){
       if(ok || !alive()) return;

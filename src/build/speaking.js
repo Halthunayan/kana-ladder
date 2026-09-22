@@ -21,7 +21,12 @@ function speakingWords(){
   var keys=shuffle(practiceQueue()), seen={}, out=[];
   for(var i=0;i<keys.length && out.length<SP_WORDS;i++){
     var id=keys[i].split("|")[0];
-    if(seen[id] || !IDX[id]) continue;
+    // practiceQueue mixes in sentences and conjugation drills; IDX indexes
+    // all three under one id space (t:"w"/"s"/"g"), so a bare id lookup does
+    // not tell them apart. Speaking is a word drill, so only "w" qualifies:
+    // anything else was a full sentence sitting in a single tile, breaking
+    // both the layout and the word-level grading thresholds.
+    if(seen[id] || !IDX[id] || IDX[id].t!=="w") continue;
     seen[id]=1; out.push(id);
   }
   return out;
@@ -126,6 +131,7 @@ function spListening(){
    has nothing for it; the same fallback order every card in the app uses */
 function spPlayWord(c, gen){
   var alive=function(){ return gen===SP.gen; };
+  noteAudioPlayed();
   var key=clipFor(c);
   if(key && audOn() && S.settings.cardAudio!==false){
     return audPlay(key, 1, alive).then(function(ok){
@@ -143,6 +149,10 @@ function spAsk(i){
   SP.cur=i;
   var id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
   var gen=++SP.gen;
+  // the quiet retry on a wrong or unheard answer calls spAsk on this same
+  // index again, so the fail count must only reset when the WORD changes,
+  // never on every call, or it can never count past one
+  if(SP._failId!==id){ SP._failId=id; SP._fails=0; }
   spRenderTiles();
   spStageShow(c, dir);
   var pre = dir==="j" ? spPlayWord(c, gen)
@@ -172,10 +182,20 @@ function spListenFor(c, dir, gen){
         document.getElementById("spMicBtn").hidden=false;
         return;
       }
-      // nothing heard: not a wrong answer, just ask again
+      // nothing heard: not a wrong answer on its own, so retry a couple of
+      // times quietly, but stop and say so rather than listening forever if
+      // the phone is genuinely not capturing anything this round
+      SP._fails=(SP._fails||0)+1;
+      if(SP._fails>=3){
+        SP.mic="stuck";
+        document.getElementById("spState").textContent="Not hearing you. Tap to try again, or tap the tile for the answer.";
+        document.getElementById("spMicBtn").hidden=false;
+        return;
+      }
       setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur); }, 500);
       return;
     }
+    SP._fails=0;
     SP.mic="ok";
     var g = dir==="j" ? enGrade(c.en, r.alts) : spGradeJa(c.kana, r.alts);
     var pass = dir==="j" ? g.sim>=SP_PASS_EN : g.sim>=SP_PASS_JA;

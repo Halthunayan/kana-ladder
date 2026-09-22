@@ -453,6 +453,11 @@
     </div>
     <pre class="diagbox" id="speechDiag" hidden></pre>
     <div class="opt">
+      <div><div class="t">What the microphone is actually doing</div><div class="d">Read-only, and it never listens on its own. Scenes and Speaking both use this same recognizer, so this covers either one. If a round says nothing was heard, open this and send a screenshot: it says whether the recognizer started, whether it ever got a result, how long since the last clip played, and whether the app is running installed to the home screen or in a browser tab, since iOS treats those differently.</div></div>
+      <button class="btn btn-ghost" id="micDiagBtn">Show</button>
+    </div>
+    <pre class="diagbox" id="micDiag" hidden></pre>
+    <div class="opt">
       <div><div class="t">English voice</div><div class="d">Only used as the fallback, when the downloaded voice is off or missing. Safari offers a subset of the voices iOS has, and on many devices the English half of it is robotic. Pick whichever sounds human. Now using <b id="enVoiceNow">&mdash;</b>.</div></div>
       <select id="setEnVoice"><option value="auto">Best available</option></select>
     </div>
