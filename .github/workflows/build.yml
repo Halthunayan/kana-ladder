@@ -138,6 +138,13 @@ jobs:
       - name: scenes play, listen and grade
         run: node src/tests/scenes.js
 
+      # Speaking drills the same weak words Focus would, out loud, half in
+      # English and half in Japanese. The recogniser is scripted, so what is
+      # asserted is the grading in both directions, the wrong-then-retry loop,
+      # and that a phone with no microphone still finishes the round.
+      - name: speaking grades both directions, no clicks needed
+        run: node src/tests/speaking.js
+
       # Twice in one day the app went silent in both languages while the
       # pre-rendered audio kept playing, and nine suites stayed green. Both
       # times the cause was code added to the speech path that called cancel
