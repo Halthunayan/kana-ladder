@@ -173,7 +173,7 @@ function spListenFor(c, dir, gen){
     return;
   }
   spListening();
-  listenOnce(SP_LISTEN_MS, dir==="j" ? "en-US" : "ja-JP").then(function(r){
+  listenOnce(SP_LISTEN_MS, dir==="j" ? "en-US" : "ja-JP", "spState").then(function(r){
     if(gen!==SP.gen) return;
     if(!r.alts.length){
       if(r.err && /not-allowed|service-not-allowed|start:/.test(r.err)){
@@ -215,7 +215,7 @@ function spMicTap(){
   var gen=++SP.gen, id=SP.ids[SP.cur], c=spCard(id), dir=SP.dir[id];
   document.getElementById("spMicBtn").hidden=true;
   spListening();
-  listenOnce(SP_LISTEN_MS, dir==="j" ? "en-US" : "ja-JP").then(function(r){
+  listenOnce(SP_LISTEN_MS, dir==="j" ? "en-US" : "ja-JP", "spState").then(function(r){
     if(gen!==SP.gen) return;
     if(!r.alts.length){
       document.getElementById("spState").textContent="Still nothing heard.";

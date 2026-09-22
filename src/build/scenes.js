@@ -153,7 +153,12 @@ function noteAudioPlayed(){ LAST_AUDIO_AT=Date.now(); }
 /* Best known mitigation for the same WebKit bug: a short pause plus a
    throwaway getUserMedia grab before starting the recognizer. Documented as
    "partial, unreliable" relief by the people who filed the bug, not a fix -
-   it costs under a second and is cheap insurance either way. Never rejects. */
+   it costs under a second and is cheap insurance either way. Never rejects.
+   Kept separate from micWaveStart below: this one is a true grab-and-release
+   with nothing left open, so it stays safe to call on its own (the __kl test
+   hook exposes it directly) even though listenOnce no longer calls it - the
+   live stream micWaveStart holds for the wave already primes the mic just
+   as well, for as long as the wave is on screen. */
 function micPrime(delayMs){
   return new Promise(function(res){
     setTimeout(function(){
@@ -174,16 +179,37 @@ function micPrime(delayMs){
 /* One utterance. Resolves with {alts:[...]} or {alts:[], err:"..."}. Never
    rejects, never hangs: a hard timeout stops it whatever the engine does.
    lang defaults to Japanese; Speaking mode passes "en-US" for the half of its
-   questions that are answered in English. */
-function listenOnce(ms, lang){
+   questions that are answered in English. stateElId, when given, is the id
+   of the "listening" line on screen (spState / scState) - the mic wave bars
+   are mounted right after it for the length of this one attempt, so he can
+   see whether the phone is hearing anything at all, not just guess from a
+   line of text that never changes. */
+function listenOnce(ms, lang, stateElId){
   var sinceAudio=Date.now()-LAST_AUDIO_AT;
-  return micPrime(320).then(function(){
+  var wave=null;
+  if(stateElId){
+    var stateEl=document.getElementById(stateElId);
+    wave=micWaveMount(stateEl);
+  }
+  var primed = wave
+    ? micWaveStart(function(levels){
+        for(var i=0;i<wave.bars.length && i<levels.length;i++){
+          wave.bars[i].style.height=Math.max(4, Math.round(levels[i]*26))+"px";
+        }
+      }, wave.bars.length)
+    : micWaveStart(null);
+  return primed.then(function(){
     return new Promise(function(res){
       var C=recCtor();
-      if(!C){ micNote({at:Date.now(),lang:lang,sinceAudio:sinceAudio,standalone:isStandalone(),started:false,result:false,err:"unavailable"}); res({alts:[], err:"unavailable"}); return; }
+      if(!C){
+        micWaveStop(); if(wave) wave.remove();
+        micNote({at:Date.now(),lang:lang,sinceAudio:sinceAudio,standalone:isStandalone(),started:false,result:false,err:"unavailable"});
+        res({alts:[], err:"unavailable"}); return;
+      }
       var R, done=false, timer=null, alts=[], started=false, t0=Date.now();
       function fin(r){
         if(done) return; done=true; if(timer) clearTimeout(timer); try{ R.abort(); }catch(e){} SC.rec=null;
+        micWaveStop(); if(wave) wave.remove();
         micNote({at:t0,lang:lang,sinceAudio:sinceAudio,standalone:isStandalone(),started:started,result:!!(r.alts&&r.alts.length),err:r.err||null,ms:Date.now()-t0});
         res(r);
       }
@@ -361,7 +387,7 @@ function sceneStep(gen, i){
   }
   /* his line: prompt in English, listen, grade, then the model answer */
   sceneShow(l, x, recAvailable() ? "prompt" : "offline");
-  var p = recAvailable() ? listenOnce(SC_LISTEN_MS) : wait(3500).then(function(){ return {alts:[], err:"unavailable"}; });
+  var p = recAvailable() ? listenOnce(SC_LISTEN_MS, null, "scState") : wait(3500).then(function(){ return {alts:[], err:"unavailable"}; });
   p.then(function(r){
     if(gen!==SC.gen) return;
     var g=null;
@@ -389,7 +415,7 @@ function sceneMicTap(){
   var l=sc.lines[SC.line], x=sceneLine(l); if(l.who!=="you") return;
   SC.gen++; gen=SC.gen;
   sceneShow(l, x, "prompt");
-  listenOnce(SC_LISTEN_MS).then(function(r){
+  listenOnce(SC_LISTEN_MS, null, "scState").then(function(r){
     if(gen!==SC.gen) return;
     var g = r.alts.length ? sceneGrade(x.kana, r.alts) : null;
     if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();

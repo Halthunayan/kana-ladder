@@ -2750,6 +2750,14 @@ function audPlayBytesWA(bytes){
       if(AUD.finWA===fin) AUD.finWA=null;
       if(t) clearTimeout(t);
       if(AUD.src){ try{ AUD.src.onended=null; }catch(e){} AUD.src=null; }
+      /* Suspend right away rather than leaving the context "running" for the
+         rest of the session. A live playback context still asks WebKit for
+         a playback audio session; the mic that Speaking/Scenes want right
+         after this needs playAndRecord instead. Suspending hands the session
+         back the moment the clip is over, and audCtx() resumes it again, on
+         demand, the next time a clip plays - the cost is a resume call, not
+         a new context. */
+      try{ if(ctx.state==="running") ctx.suspend(); }catch(e){}
       res(ok);
     }
     AUD.finWA=fin;
@@ -2794,6 +2802,74 @@ function audPlayWA(key, alive){
     return audPlayBytesWA(s.buf.slice(r[0], r[0]+r[1]));
   });
   }).catch(function(){ return false; });
+}
+/* A live meter for the microphone. Neither Speaking nor Scenes could tell him
+   whether the phone was hearing anything at all while a round sat there
+   silent - the mic permission indicator stays on either way, and nothing on
+   screen moved. This grabs its own getUserMedia stream, feeds it into an
+   AnalyserNode, and hands the caller a plain array of 0..1 levels on every
+   animation frame, one per bar it asked for.
+   It is deliberately a second, independent listener on the microphone from
+   whatever SpeechRecognition is doing internally - the Web Speech API gives
+   no hook into its own audio levels, so this is the only way to show the
+   raw signal. Nothing here has confirmed that a second concurrent grab is
+   free of side effects on SpeechRecognition itself; if the bars move but
+   recognition still comes back empty, that already tells the two apart -
+   the microphone and the recognizer are not the same failure. */
+var MIC={stream:null, ctx:null, an:null, raf:null};
+function micWaveStart(onLevels, nBars){
+  micWaveStop();
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return Promise.resolve(null);
+  return navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    MIC.stream=stream;
+    var C=window.AudioContext || window.webkitAudioContext;
+    if(C && onLevels){
+      try{
+        var ctx=new C(), src=ctx.createMediaStreamSource(stream), an=ctx.createAnalyser();
+        an.fftSize=64; an.smoothingTimeConstant=0.55;
+        src.connect(an);
+        MIC.ctx=ctx; MIC.an=an;
+        var buf=new Uint8Array(an.frequencyBinCount), n=nBars||10, per=Math.max(1, Math.floor(buf.length/n));
+        (function loop(){
+          if(!MIC.an) return;
+          an.getByteFrequencyData(buf);
+          var levels=[];
+          for(var i=0;i<n;i++){
+            var s=0, c=0;
+            for(var j=i*per; j<Math.min(buf.length,(i+1)*per); j++){ s+=buf[j]; c++; }
+            levels.push(c ? (s/c)/255 : 0);
+          }
+          onLevels(levels);
+          MIC.raf=requestAnimationFrame(loop);
+        })();
+      }catch(e){}
+    }
+    return stream;
+  }, function(){ return null; });
+}
+function micWaveStop(){
+  if(MIC.raf){ try{ cancelAnimationFrame(MIC.raf); }catch(e){} MIC.raf=null; }
+  if(MIC.an){ try{ MIC.an.disconnect(); }catch(e){} MIC.an=null; }
+  if(MIC.ctx){ try{ MIC.ctx.close(); }catch(e){} MIC.ctx=null; }
+  if(MIC.stream){ try{ MIC.stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} MIC.stream=null; }
+}
+/* The bar graph itself: plain inline-styled spans, built and torn down at
+   runtime rather than added to body.html/style.css, so this stays a change
+   to these three files. Mounted right after the state line (spState /
+   scState) for the length of one listen attempt. */
+function micWaveMount(afterEl){
+  if(!afterEl || !afterEl.parentNode) return null;
+  var host=document.createElement("div");
+  host.className="micwave";
+  host.style.cssText="display:flex;align-items:flex-end;justify-content:center;gap:3px;height:26px;margin:6px 0 2px;";
+  var bars=[];
+  for(var i=0;i<10;i++){
+    var b=document.createElement("span");
+    b.style.cssText="display:block;width:4px;min-height:4px;height:4px;border-radius:2px;background:#3ecf8e;transition:height 70ms linear;flex:none;";
+    host.appendChild(b); bars.push(b);
+  }
+  afterEl.parentNode.insertBefore(host, afterEl.nextSibling);
+  return {host:host, bars:bars, remove:function(){ try{ host.remove(); }catch(e){} }};
 }
 /* The manifest maps a sprite to the content-addressed file it actually lives
    in, and audSpriteFor returns null without it, so every call below this line
@@ -4512,6 +4588,7 @@ if("serviceWorker" in navigator){
       micReport:micReport, MIC_LOG:MIC_LOG, listenOnce:listenOnce, micPrime:micPrime, isStandalone:isStandalone,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, ttsUsable:ttsUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audPlayWA:audPlayWA, audCtx:audCtx, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
+      MIC:MIC, micWaveStart:micWaveStart, micWaveStop:micWaveStop, micWaveMount:micWaveMount,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,
       trueRetention:trueRetention, typedAccuracy:typedAccuracy, dirAccuracy:dirAccuracy,
