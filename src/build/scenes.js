@@ -235,7 +235,7 @@ function scenePlay(x, gen){
   var alive=function(){ return gen===SC.gen; };
   noteAudioPlayed();
   if(audOn() && S.settings.cardAudio!==false){
-    return audPlay(sceneClipKey(x), 1, alive).then(function(ok){
+    return audPlayWA(sceneClipKey(x), alive).then(function(ok){
       if(ok || !alive()) return;
       speak(x.kana); return wait(estSpeechMs(x.kana));
     });

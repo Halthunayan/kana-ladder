@@ -134,7 +134,7 @@ function spPlayWord(c, gen){
   noteAudioPlayed();
   var key=clipFor(c);
   if(key && audOn() && S.settings.cardAudio!==false){
-    return audPlay(key, 1, alive).then(function(ok){
+    return audPlayWA(key, alive).then(function(ok){
       if(ok || !alive()) return;
       speak(c.kana); return wait(estSpeechMs(c.kana));
     });

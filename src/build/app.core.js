@@ -2549,7 +2549,7 @@ var AUD_BASE="audio/v1/", AUD_CACHE="kana-audio-v1";
    fallback, so they described a path a phone with the library never takes.
    Two lines here make the real channel observable, which is the only way a
    test can assert what is heard rather than what was nearly heard. */
-var AUD={man:null, tried:false, want:{}, loaded:{}, el:null, url:null, fin:null, log:[]};
+var AUD={man:null, tried:false, want:{}, loaded:{}, el:null, url:null, fin:null, log:[], ctx:null, src:null, finWA:null};
 function audNote(key){ AUD.log.push({k:key, t:Date.now()}); if(AUD.log.length>40) AUD.log.shift(); }
 
 function audOn(){ return S.settings.carAudio!==false; }
@@ -2666,6 +2666,7 @@ function audEl(){
 function audStop(){
   try{ if(AUD.el) AUD.el.pause(); }catch(e){}
   if(AUD.fin){ var f=AUD.fin; AUD.fin=null; f(false); }
+  audStopWA();
 }
 function audPlayBytes(bytes, pb){
   return new Promise(function(res){
@@ -2699,6 +2700,100 @@ function audPlayBytes(bytes, pb){
     }catch(e){ fin(false); return; }
     t=setTimeout(function(){ fin(true); }, 30000);   // never hang the drive
   });
+}
+/* Scenes and Speaking listen for speech right after a clip finishes, and
+   WebKit has a long-standing, still-open bug (webkit.org/b/321436) where
+   SpeechRecognition can silently stop delivering any result at all right
+   after an <audio>/<video> element has played, sometimes for the rest of
+   that session. A delay before listening only races that dead window; it
+   does not close it. Web Audio's own graph never touches the code path the
+   bug lives in, so a clip played this way should not open the window in
+   the first place, which is a real fix rather than a longer guess.
+   Everything else that reads a card out loud (Study, Focus, the "read
+   slowly" replay) keeps the <audio> element on purpose: nothing there
+   listens for speech afterward, and the element's playbackRate preserves
+   pitch on a slowdown the way a raw Web Audio rate change would not. */
+function audCtx(){
+  if(!AUD.ctx){
+    var C=window.AudioContext || window.webkitAudioContext;
+    AUD.ctx = C ? new C() : null;
+  }
+  // iOS suspends a freshly built context until a user gesture wakes it; this
+  // is a cheap no-op once it is already running.
+  if(AUD.ctx && AUD.ctx.state==="suspended"){ try{ AUD.ctx.resume(); }catch(e){} }
+  return AUD.ctx;
+}
+(function(){
+  // Wake the shared context on the very first tap anywhere in the app, well
+  // before Speaking or Scenes can need it, rather than leaving the first
+  // creation to race a card's own listen call.
+  function unlock(){
+    audCtx();
+    document.removeEventListener("touchend", unlock, true);
+    document.removeEventListener("click", unlock, true);
+  }
+  document.addEventListener("touchend", unlock, true);
+  document.addEventListener("click", unlock, true);
+})();
+function audStopWA(){
+  try{ if(AUD.src) AUD.src.stop(); }catch(e){}
+  AUD.src=null;
+  if(AUD.finWA){ var f=AUD.finWA; AUD.finWA=null; f(false); }
+}
+function audPlayBytesWA(bytes){
+  return new Promise(function(res){
+    var ctx=audCtx();
+    if(!ctx){ res(false); return; }
+    var done=false, t=null;
+    function fin(ok){
+      if(done) return; done=true;
+      if(AUD.finWA===fin) AUD.finWA=null;
+      if(t) clearTimeout(t);
+      if(AUD.src){ try{ AUD.src.onended=null; }catch(e){} AUD.src=null; }
+      res(ok);
+    }
+    AUD.finWA=fin;
+    try{
+      // decodeAudioData detaches the buffer it decodes in a spec-compliant
+      // engine. bytes is always a fresh slice made for this one call (see
+      // audPlayWA below), never the cached sprite buffer other keys still
+      // need, so that detach is harmless.
+      ctx.decodeAudioData(bytes, function(buf){
+        if(done) return;
+        try{
+          var src=ctx.createBufferSource();
+          src.buffer=buf;
+          src.onended=function(){ fin(true); };
+          AUD.src=src;
+          src.connect(ctx.destination);
+          src.start(0);
+        }catch(e){ fin(false); }
+      }, function(){ fin(false); });
+    }catch(e){ fin(false); return; }
+    t=setTimeout(function(){ fin(true); }, 30000);   // never hang a round
+  });
+}
+/* Same manifest/sprite/byte-range lookup as audPlay, played through
+   audPlayBytesWA instead of the shared <audio> element. Speaking and Scenes
+   call this one; both always ask for it at pb 1, so the element's
+   pitch-preserving slowdown that audPlay still relies on elsewhere never
+   comes up here. */
+function audPlayWA(key, alive){
+  if(!audOn()) return Promise.resolve(false);
+  if(alive && !alive()) return Promise.resolve(true);
+  return audManifestReady().then(function(m){
+  if(!m) return false;
+  if(alive && !alive()) return true;
+  var sp=audSpriteFor(key);
+  if(!sp) return false;
+  return audLoad(sp).then(function(s){
+    if(!s || !s.idx[key]) return false;
+    if(alive && !alive()) return true;
+    var r=s.idx[key];
+    audNote(key);
+    return audPlayBytesWA(s.buf.slice(r[0], r[0]+r[1]));
+  });
+  }).catch(function(){ return false; });
 }
 /* The manifest maps a sprite to the content-addressed file it actually lives
    in, and audSpriteFor returns null without it, so every call below this line
@@ -4416,7 +4511,7 @@ if("serviceWorker" in navigator){
       speakingWords:speakingWords, speakingStart:speakingStart, spAsk:spAsk, spGradeJa:spGradeJa, enGrade:enGrade, enAlts:enAlts, SP:SP, go:go,
       micReport:micReport, MIC_LOG:MIC_LOG, listenOnce:listenOnce, micPrime:micPrime, isStandalone:isStandalone,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, ttsUsable:ttsUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
-      AUD:AUD, audPlay:audPlay, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
+      AUD:AUD, audPlay:audPlay, audPlayWA:audPlayWA, audCtx:audCtx, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
       audManifest:audManifest, audManifestReady:audManifestReady, audPreload:audPreload, audOn:audOn, audBytesCached:audBytesCached,
       audSpritesFor:audSpritesFor, audAllSprites:audAllSprites, audPrune:audPrune, formSet:formSet, carSay:carSay, carBegin2:carBegin2,
       trueRetention:trueRetention, typedAccuracy:typedAccuracy, dirAccuracy:dirAccuracy,
