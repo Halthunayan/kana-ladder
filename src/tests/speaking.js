@@ -192,6 +192,104 @@ console.log('\n5. no recogniser here still runs the round, without hanging or sc
   await ctx.close();
 }
 
+/* ---------- 6. the fallback pool never hands out a sentence or a conjugation drill ---------- */
+console.log('\n6. when nothing is weak, the fallback draws only plain words, never a sentence or a drill');
+{
+  const ctx=await b.newContext({viewport:{width:393,height:852}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage();
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  const r=await p.evaluate(()=>{
+    const k=window.__kl, now=Date.now();
+    // a sentence id and a conjugation id, both real entries in IDX under the
+    // same id space as plain words: practiceQueue() mixes all three kinds in
+    const sentId=Object.keys(k.IDX).find(id=>k.IDX[id].t==='s');
+    const conjId=Object.keys(k.IDX).find(id=>k.IDX[id].t==='g');
+    // in rotation, but not weak, so weakWords() stays empty and the fallback
+    // (practiceQueue) is what speakingWords() actually has to filter
+    [sentId, conjId, 'c0002', 'c0003', 'c0006', 'c0007'].forEach(id=>{
+      k.S.items[id+'|j']={s:0,st:2,n:6,ef:2.3,iv:12,due:now+999999999,lapses:0,piv:0,seen:6,ok:6,df:2.0,sb:9.0,lr:now};
+    });
+    const ids=k.speakingWords();
+    const bad=ids.filter(id=>!k.IDX[id] || k.IDX[id].t!=='w');
+    return {weak:k.weakWords().length, count:ids.length, bad, sentId, conjId};
+  });
+  ok(r.weak===0,'nothing is weak, so the fallback path is what runs ('+r.weak+')');
+  ok(r.count>0,'the fallback still finds words to draw ('+r.count+')');
+  ok(r.bad.length===0,'the sentence and the conjugation drill were both filtered out ('+JSON.stringify(r.bad)+')');
+  await ctx.close();
+}
+
+/* ---------- 7. the longest real word or gloss in the deck still fits the phone ---------- */
+console.log('\n7. even the longest word, gloss or greeting in the deck stays on screen');
+{
+  const ctx=await b.newContext({viewport:{width:390,height:844}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  const overflow=async (id, dir)=>p.evaluate(({id,dir})=>{
+    const k=window.__kl;
+    k.SP.ids=[id]; k.SP.dir={}; k.SP.dir[id]=dir; k.SP.state={}; k.SP.cur=-1; k.SP.running=true;
+    k.go('speak'); k.spAsk(0);
+    const vw=window.innerWidth, bad=[];
+    document.querySelectorAll('#s-speak *').forEach(el=>{
+      const r=el.getBoundingClientRect();
+      if(r.right>vw+1 || r.left<-1) bad.push(el.className||el.id||el.tagName);
+    });
+    return bad;
+  }, {id,dir});
+  const picks=await p.evaluate(()=>{
+    const k=window.__kl; let longestEn=null, longestJa=null;
+    for(const id in k.IDX){ const c=k.IDX[id]; if(!c||c.t!=='w'||!c.en||!c.kana) continue;
+      if(!longestEn || c.en.length>k.IDX[longestEn].en.length) longestEn=id;
+      const jlen=c.kana.length+(c.romaji||'').length;
+      if(!longestJa || jlen>(k.IDX[longestJa].kana.length+(k.IDX[longestJa].romaji||'').length)) longestJa=id; }
+    return {longestEn, longestJa};
+  });
+  const badEn=await overflow(picks.longestEn,'e');
+  const badJa=await overflow(picks.longestJa,'j');
+  ok(badEn.length===0,'the longest English gloss in the deck wraps instead of running off screen ('+badEn.join(',')+')');
+  ok(badJa.length===0,'the longest kana and romaji in the deck wraps instead of running off screen ('+badJa.join(',')+')');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+
+/* ---------- 8. a dead microphone stops retrying and says so, instead of listening forever ---------- */
+console.log('\n8. a microphone that never hears anything gives up and says so, instead of listening forever');
+{
+  const ctx=await b.newContext({viewport:{width:393,height:852}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  await p.evaluate(()=>{
+    const k=window.__kl;
+    k.SP.ids=['c0000']; k.SP.dir={c0000:'e'}; k.SP.state={}; k.SP.cur=-1; k.SP.running=true; k.go('speak');
+    window.__recScript=[]; // every attempt resolves with no-speech, forever, until the app stops asking
+    k.spAsk(0);
+  });
+  await p.waitForFunction(()=>window.__kl.SP.mic==='stuck',null,{timeout:20000});
+  const r=await p.evaluate(()=>({
+    starts:window.__recStarts,
+    state:document.getElementById('spState').textContent,
+    micHidden:document.getElementById('spMicBtn').hidden
+  }));
+  ok(r.starts===3,'it tries a bounded number of times, not forever ('+r.starts+')');
+  ok(/Not hearing you/.test(r.state),'and says plainly that nothing is being heard ('+r.state+')');
+  ok(!r.micHidden,'and offers the tap-to-speak fallback instead of hanging on "listening" ('+r.micHidden+')');
+  // it does not start a fourth time on its own
+  await p.waitForTimeout(700);
+  const still=await p.evaluate(()=>window.__recStarts);
+  ok(still===3,'and it really has stopped, not just paused between retries ('+still+')');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+
 await b.close();
 console.log('\n'+(fails.length? 'FAILED: '+fails.length+'\n  '+fails.join('\n  ') : 'SPEAKING GRADES BOTH DIRECTIONS, NO CLICKS NEEDED'));
 process.exit(fails.length?1:0);
