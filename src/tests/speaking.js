@@ -161,7 +161,10 @@ console.log('\n3. wrong turns a ticket red and asks again; right turns it green 
   ok(r.starts===3,'the mic reopened once per direction change, not once per attempt ('+r.starts+')');
   ok(r.state[0]==='good' && r.state[1]==='good' && r.state[2]==='good','all three end up correct ('+JSON.stringify(r.state)+')');
   ok(/3 of 3/.test(r.sub),'the round reports three of three ('+r.sub+')');
-  ok(r.tiles.every(c=>/s-good/.test(c)),'every ticket ends up green, even the one that was wrong first ('+r.tiles.join(' | ')+')');
+  // word0 took two tries, so its ticket is yellow, not green - green is
+  // reserved for a first-try answer, same as the other two
+  ok(/s-retry/.test(r.tiles[0]),'the one that needed a second try is yellow, not green ('+r.tiles[0]+')');
+  ok(/s-good/.test(r.tiles[1]) && /s-good/.test(r.tiles[2]),'the two first-try answers are green ('+r.tiles[1]+', '+r.tiles[2]+')');
   // tap a solved ticket and see the answer
   await p.click('#spTiles .sptile[data-i="0"]'); await p.waitForTimeout(80);
   const peek=await p.evaluate(()=>({hidden:document.getElementById('spPeek').hidden, text:document.getElementById('spPeek').textContent}));
@@ -325,6 +328,52 @@ console.log('\n8. total silence never makes the mic give up - it says so plainly
   await p.waitForFunction(()=>window.__kl.SP.state[0]==='good',null,{timeout:20000});
   const starts2=await p.evaluate(()=>window.__recStarts);
   ok(starts2===1,'and it was the same open mic that finally heard it ('+starts2+')');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+
+/* ---------- 9. three wrong tries reveal the answer, grade it, and move on ---------- */
+console.log('\n9. three wrong tries in a row reveal the answer, grade it at the bottom of the scale, and move on');
+{
+  const ctx=await b.newContext({viewport:{width:393,height:852}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  await p.evaluate(()=>{
+    const k=window.__kl;
+    // two words, so there is something to move on to once the first one
+    // runs out of tries
+    k.SP.ids=['c0000','c0001']; k.SP.dir={c0000:'e',c0001:'e'};
+    k.SP.state={}; k.SP.cur=-1; k.SP.running=true; k.go('speak');
+    k.spAsk(0);
+  });
+  for(let i=0;i<3;i++){
+    await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+    await p.evaluate(()=>window.__recSay('さようなら'));   // wrong, every single time, on purpose
+    await p.waitForFunction((n)=>window.__kl.SP.tries[0]===n,i+1,{timeout:20000});
+  }
+  const mid=await p.evaluate(()=>({state:window.__kl.SP.state[0], grade:window.__kl.SP.grade[0],
+    verdict:window.__kl.SP.verdict[0], tries:window.__kl.SP.tries[0],
+    heardShown:document.getElementById('spHeard').textContent}));
+  ok(mid.tries===3,'exactly three tries were used, not more or fewer ('+mid.tries+')');
+  ok(mid.state==='bad','the ticket is marked wrong, not left pending ('+mid.state+')');
+  ok(mid.verdict==='missed' && mid.grade===50,'a completely wrong answer grades at the bottom of the scale ('+mid.verdict+', '+mid.grade+')');
+  ok(/konnichiwa/.test(mid.heardShown),'the correct answer is revealed on screen ('+mid.heardShown+')');
+  const tileCls=await p.evaluate(()=>document.querySelector('#spTiles .sptile[data-i="0"]').className);
+  ok(/s-bad/.test(tileCls),'never right in three tries shows red, not yellow or green ('+tileCls+')');
+  // the reveal actually holds for a beat - it is not an instant skip to the next word
+  await p.waitForTimeout(600);
+  const stillHere=await p.evaluate(()=>window.__kl.SP.cur);
+  ok(stillHere===0,'the reveal holds before moving on, rather than advancing straight away ('+stillHere+')');
+  // and it does move on by itself once that hold is over, with no tap needed
+  await p.waitForFunction(()=>window.__kl.SP.cur===1,null,{timeout:20000});
+  await p.click('#spSkipBtn');   // finish the round without needing to know word1's own gloss
+  await p.waitForFunction(()=>!document.getElementById('spDone').hidden,null,{timeout:20000});
+  const list=await p.evaluate(()=>document.getElementById('spDoneList').textContent);
+  ok(/50%/.test(list),'the finish screen\'s history carries the numeric grade through ('+list.slice(0,160)+')');
+  ok(/konnichiwa/.test(list),'and the correct answer it was graded against');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();
 }

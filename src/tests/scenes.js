@@ -128,7 +128,11 @@ console.log('\n3. rehearse: their lines play, his lines are heard, nothing needs
     words.forEach(w=>{ k.S.items[w+'|j']={s:1,st:0,n:4,ef:2.5,iv:20,due:now+864000000,lapses:0,piv:0,seen:6,ok:6,df:0.3,sb:8,lr:0}; });
     const you=sc.lines.map((l,i)=>({i,kana:k.SIDX[l.sid].kana})).filter((x,j)=>sc.lines[x.i].who==='you');
     window.__youLineIdx=you.map(x=>x.i);
-    window.__youAnswers=[you[0].kana, 'えいごのメニューはありますか', you[2].kana];   // right, wrong, right
+    // right first try; wrong three times running (uses up all three tries,
+    // so the line reveals and holds rather than advancing); right first try
+    window.__youAnswers=[[you[0].kana],
+      ['えいごのメニューはありますか','えいごのメニューはありますか','えいごのメニューはありますか'],
+      [you[2].kana]];
     return {ready:k.sceneReady(sc), you:you.length};
   });
   ok(prep.ready,'the scene is open once its words are known');
@@ -145,27 +149,44 @@ console.log('\n3. rehearse: their lines play, his lines are heard, nothing needs
   ok(brief.lines===7,'and lists all of its lines ('+brief.lines+')');
   ok(brief.reh===false,'Rehearse is enabled');
   await p.click('#scRehearse');
-  // one line at a time: wait until the rehearse is actually prompting for
-  // that exact line before "saying" its answer, rather than firing all
-  // three on a timer and hoping the pacing lines up
+  // one attempt at a time: wait until the rehearse is actually prompting
+  // for that exact line before "saying" the next attempt, rather than
+  // firing everything on a timer and hoping the pacing lines up. A line
+  // with more than one scripted answer is a line that is meant to be
+  // gotten wrong until its tries run out - each retry returns to the same
+  // "prompt" state on the same line, which is what the wait below catches.
   const idxs=await p.evaluate(()=>window.__youLineIdx), answers=await p.evaluate(()=>window.__youAnswers);
   for(let k=0;k<idxs.length;k++){
-    await p.waitForFunction((i)=>{ const kl=window.__kl;
-      return !!kl && kl.SC.line===i && /prompt/.test(document.getElementById('scState').className);
-    }, idxs[k], {timeout:20000});
-    await p.evaluate((t)=>window.__recSay(t), answers[k]);
+    for(const text of answers[k]){
+      await p.waitForFunction((i)=>{ const kl=window.__kl;
+        return !!kl && kl.SC.line===i && /prompt/.test(document.getElementById('scState').className);
+      }, idxs[k], {timeout:20000});
+      await p.evaluate((t)=>window.__recSay(t), text);
+    }
   }
   await p.waitForFunction(()=>!document.getElementById('scDone').hidden,null,{timeout:30000});
   const r=await p.evaluate(()=>{ const k=window.__kl;
     return {starts:window.__recStarts, results:k.SC.results.map(x=>x.verdict), head:document.getElementById('scDoneHead').textContent,
-      saved:k.S.scenes&&k.S.scenes.sc08, plays:k.AUD.log.filter(x=>/^sj:/.test(x.k)).length}; });
+      saved:k.S.scenes&&k.S.scenes.sc08, plays:k.AUD.log.filter(x=>/^sj:/.test(x.k)).length,
+      list:document.getElementById('scDoneList').textContent,
+      rowCls:Array.prototype.map.call(document.querySelectorAll('#scDoneList .scres'),el=>el.className)}; });
   ok(r.starts===1,'the phone opened the mic once for the whole rehearsal, not once per line ('+r.starts+')');
-  ok(JSON.stringify(r.results)==='["good","missed","good"]','graded right, wrong, right ('+JSON.stringify(r.results)+')');
+  ok(JSON.stringify(r.results)==='["good","missed","good"]','graded right, wrong (out of tries), right ('+JSON.stringify(r.results)+')');
   ok(/^67%$/.test(r.head),'the score is shown ('+r.head+')');
   ok(r.saved && Math.abs(r.saved.last-2/3)<0.01 && r.saved.n===1,'and saved for the scene ('+JSON.stringify(r.saved)+')');
-  // their lines (4 of the scene's 7) are shown on screen, not spoken - only
-  // his own 3 lines play, as the model-answer readback after each is graded
-  ok(r.plays===3,'only his lines played, as the model answer - theirs are read, not heard ('+r.plays+')');
+  // their lines (4 of the scene's 7) are shown on screen, not spoken. His
+  // own 3 lines each play once as the model answer - the two retries on
+  // the middle line do not play it again, only the final grade does -
+  // whether that grade is a pass or the reveal after the third miss.
+  ok(r.plays===3,'each of his three lines played once, as the model answer, not once per attempt ('+r.plays+')');
+  ok(/100%/.test(r.list) && /50%/.test(r.list),'the history shows a numeric grade per line, not just a colour ('+r.list.slice(0,200)+')');
+  ok(/You say/.test(r.list) && /Correct/.test(r.list) && /You said/.test(r.list),
+    'each row names the question, the correct line and what he actually said');
+  // the colour is not the grade's closeness, it's how easily the answer came:
+  // first-try right is green, never right in three tries is red
+  ok(/\bscres good\b/.test(r.rowCls[0]) && /\bscres good\b/.test(r.rowCls[2]),
+    'the two first-try lines are green ('+r.rowCls[0]+', '+r.rowCls[2]+')');
+  ok(/\bscres bad\b/.test(r.rowCls[1]),'the line never said right in three tries is red, not just "missed" ('+r.rowCls[1]+')');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();
 }
