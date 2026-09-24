@@ -1,11 +1,19 @@
 /* ---------- Speaking ----------
    A drill over the same words Focus already found weak, tested by voice
    instead of a tap. A grid of tickets stands for the words in this round;
-   the stage below asks one at a time, half in English and half in Japanese,
-   picked at random. Say the answer: right turns that ticket green and moves
-   on, wrong turns it red and asks the same word again, no click either way.
-   Tapping any ticket that has been asked shows what it was. Nothing here
-   touches the schedule, the same as Focus and the car. */
+   the stage below asks one at a time, half in English and half in Japanese
+   (each word's own direction is still a coin flip), grouped so all the
+   words asked in one direction come before the other - that keeps one
+   continuous mic session open across a whole language block, only
+   reopening at the block boundary. The word or line he is asked for is
+   shown on screen, kana and romaji or the English gloss - never spoken
+   aloud, since he reads it himself; the pause before the mic opens just
+   holds for as long as reading it would take. Say the answer: right turns
+   that ticket green and moves on, wrong turns it red and asks the same
+   word again, no click either way. Stuck on one word: Show answer or Skip
+   move past it unscored. Tapping any ticket that has been asked shows
+   what it was. Nothing here touches the schedule, the same as Focus and
+   the car. */
 var SP_WORDS=12, SP_LISTEN_MS=6000;
 var SP_PASS_JA=0.62, SP_PASS_EN=0.6;
 var SP={ids:[], dir:{}, state:{}, cur:-1, gen:0, running:false, mic:"untried"};
@@ -127,21 +135,6 @@ function spListening(){
   var st=document.getElementById("spState");
   st.textContent="listening"; st.className="spstate prompt";
 }
-/* play a word's own clip, the library first, the device voice if the library
-   has nothing for it; the same fallback order every card in the app uses */
-function spPlayWord(c, gen){
-  var alive=function(){ return gen===SP.gen; };
-  noteAudioPlayed();
-  var key=clipFor(c);
-  if(key && audOn() && S.settings.cardAudio!==false){
-    return audPlayWA(key, alive).then(function(ok){
-      if(ok || !alive()) return;
-      speak(c.kana); return wait(estSpeechMs(c.kana));
-    });
-  }
-  speak(c.kana); return wait(estSpeechMs(c.kana));
-}
-
 /* one word of the round: show it, listen, grade, then move on or retry */
 function spAsk(i){
   if(!SP.running) return;
@@ -149,65 +142,81 @@ function spAsk(i){
   SP.cur=i;
   var id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
   var gen=++SP.gen;
-  // the quiet retry on a wrong or unheard answer calls spAsk on this same
-  // index again, so the fail count must only reset when the WORD changes,
-  // never on every call, or it can never count past one
+  // the quiet retry on a wrong answer calls spAsk on this same index again,
+  // so the fail count must only reset when the WORD changes, never on
+  // every call, or it can never count past one
   if(SP._failId!==id){ SP._failId=id; SP._fails=0; }
   spRenderTiles();
   spStageShow(c, dir);
-  var pre = dir==="j" ? spPlayWord(c, gen)
+  var lang = dir==="j" ? "en-US" : "ja-JP";
+  // words are grouped by direction (see speakingStart), so the mic only
+  // needs to reopen at a language boundary - everywhere else within the
+  // same block, the session already running keeps listening straight
+  // through into this word
+  var freshBlock = (i===0) || (SP.dir[SP.ids[i-1]]!==dir);
+  // neither direction speaks the prompt aloud - he reads the kana/romaji
+  // or the English gloss on screen himself; this just holds for as long
+  // as reading it would take before the mic opens
+  var pre = dir==="j" ? wait(estSpeechMs(c.kana))
                       : wait(500+Math.min(1300, String(c.en||"").length*16));
   pre.then(function(){
     if(gen!==SP.gen) return;
-    spListenFor(c, dir, gen);
-  });
-}
-function spListenFor(c, dir, gen){
-  if(!recAvailable()){
-    // no grading is possible here: show the answer and move on, unscored
-    SP.mic="unavailable";
-    document.getElementById("spState").textContent="No microphone here";
-    spShowHeard({heard:dir==="j"?c.en:c.kana, romaji:c.romaji}, null, dir);
-    SP.state[SP.cur]="skip"; spRenderTiles();
-    setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 1400);
-    return;
-  }
-  spListening();
-  listenOnce(SP_LISTEN_MS, dir==="j" ? "en-US" : "ja-JP", "spState").then(function(r){
-    if(gen!==SP.gen) return;
-    if(!r.alts.length){
-      if(r.err && /not-allowed|service-not-allowed|start:/.test(r.err)){
+    if(!recAvailable()){
+      // no grading is possible here: show the answer and move on, unscored
+      SP.mic="unavailable";
+      document.getElementById("spState").textContent="No microphone here";
+      spShowHeard({heard:dir==="j"?c.en:c.kana, romaji:c.romaji}, null, dir);
+      SP.state[i]="skip"; spRenderTiles();
+      setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, 1400);
+      return;
+    }
+    spListening();
+    if(freshBlock || SP._contLang!==lang){
+      SP._contLang=lang;
+      contListenStart(lang, spOnHeard, "spState", function(){
         SP.mic="blocked";
         document.getElementById("spState").textContent="Microphone blocked. Allow it, then tap to try again.";
         document.getElementById("spMicBtn").hidden=false;
-        return;
-      }
-      // nothing heard: not a wrong answer on its own, so retry a couple of
-      // times quietly, but stop and say so rather than listening forever if
-      // the phone is genuinely not capturing anything this round
-      SP._fails=(SP._fails||0)+1;
-      if(SP._fails>=3){
-        SP.mic="stuck";
-        document.getElementById("spState").textContent="Not hearing you. Tap to try again, or tap the tile for the answer.";
-        document.getElementById("spMicBtn").hidden=false;
-        return;
-      }
-      setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur); }, 500);
-      return;
+        SP._contLang=null;
+      });
     }
-    SP._fails=0;
-    SP.mic="ok";
-    var g = dir==="j" ? enGrade(c.en, r.alts) : spGradeJa(c.kana, r.alts);
-    var pass = dir==="j" ? g.sim>=SP_PASS_EN : g.sim>=SP_PASS_JA;
-    spShowHeard(g, pass, dir);
-    if(pass){
-      SP.state[SP.cur]="good"; spRenderTiles();
-      setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 650);
-    } else {
-      SP.state[SP.cur]="bad"; spRenderTiles();
-      setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur); }, 950);
-    }
+    // else: the continuous session opened for an earlier word in this same
+    // language block is still listening; nothing more to start here
+
+    // continuous mode never gives up on its own - it just waits, however
+    // long that takes - but total silence for a while is worth a hint,
+    // since Show answer / Skip are the way past a word it genuinely is
+    // not hearing
+    setTimeout(function(){
+      if(gen===SP.gen && SP.cur===i) document.getElementById("spState").textContent="Still not hearing you. Say it again, or tap Show answer / Skip.";
+    }, SP_LISTEN_MS);
   });
+}
+/* Grades whatever the continuous mic just heard against whichever word is
+   current at the moment the result arrives - one session can span several
+   words in the same language block, so "current" has to be read live
+   rather than captured back when that session was opened. */
+function spOnHeard(alts){
+  if(SP.cur<0 || SP.cur>=SP.ids.length) return;
+  // claim this result the same way sceneOnHeard/sceneMicTap do, so a
+  // continuous session that occasionally splits one answer into two final
+  // results can't advance the round twice
+  SP.gen++; var gen=SP.gen;
+  var i=SP.cur, id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
+  var g = dir==="j" ? enGrade(c.en, alts) : spGradeJa(c.kana, alts);
+  var pass = dir==="j" ? g.sim>=SP_PASS_EN : g.sim>=SP_PASS_JA;
+  spShowHeard(g, pass, dir);
+  if(pass){
+    SP._fails=0; SP.mic="ok";
+    SP.state[i]="good"; spRenderTiles();
+    setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, 650);
+  } else {
+    SP.mic="ok";
+    SP._fails=(SP._fails||0)+1;
+    if(SP._fails>=4) document.getElementById("spState").textContent="Still not quite. Say it again, or tap Show answer / Skip.";
+    SP.state[i]="bad"; spRenderTiles();
+    setTimeout(function(){ if(gen===SP.gen) spAsk(i); }, 950);
+  }
 }
 /* the tap-to-speak fallback for a phone that will not open the mic on its own */
 function spMicTap(){
@@ -230,6 +239,28 @@ function spMicTap(){
   });
 }
 
+/* Skip this word unscored - for a mic that will not cooperate. */
+function spSkipTap(){
+  if(SP.cur<0 || SP.cur>=SP.ids.length) return;
+  listenCancel();
+  var gen=++SP.gen;
+  document.getElementById("spMicBtn").hidden=true;
+  document.getElementById("spHeard").innerHTML='<span class="scv none">Skipped</span>';
+  SP.state[SP.cur]="skip"; spRenderTiles();
+  setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 500);
+}
+/* Reveal the answer without grading whatever he said, same unscored result
+   as Skip but shows the word first so he can hear/read it before moving on. */
+function spShowTap(){
+  if(SP.cur<0 || SP.cur>=SP.ids.length) return;
+  listenCancel();
+  var gen=++SP.gen, id=SP.ids[SP.cur], c=spCard(id), dir=SP.dir[id];
+  document.getElementById("spMicBtn").hidden=true;
+  var shown = dir==="j" ? c.en : c.romaji;
+  document.getElementById("spHeard").innerHTML='<span class="scv none">Answer</span><div class="schrd">'+esc(shown||"")+'</div>';
+  SP.state[SP.cur]="skip"; spRenderTiles();
+  setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 1400);
+}
 function spFinish(){
   var ok=0; for(var i=0;i<SP.ids.length;i++) if(SP.state[i]==="good") ok++;
   document.getElementById("spStage").hidden=true;
@@ -243,8 +274,13 @@ function spFinish(){
 function speakingStart(){
   var ids=speakingWords();
   if(!ids.length){ toast("Nothing met yet. Study a few words first."); return; }
-  SP.ids=ids; SP.dir={}; SP.state={}; SP.cur=-1; SP.running=true; SP.mic="untried";
+  SP.dir={}; SP.state={}; SP.cur=-1; SP.running=true; SP.mic="untried"; SP._contLang=null;
   for(var i=0;i<ids.length;i++) SP.dir[ids[i]] = Math.random()<0.5 ? "e" : "j";
+  // each word's own direction is still a coin flip, but the order they're
+  // asked in is grouped by direction so the mic can stay open across a
+  // whole language block instead of reopening before every single word
+  ids.sort(function(a,b){ return SP.dir[a]===SP.dir[b] ? 0 : (SP.dir[a]<SP.dir[b] ? -1 : 1); });
+  SP.ids=ids;
   document.getElementById("spDone").hidden=true;
   document.getElementById("spStage").hidden=false;
   document.getElementById("tabs").classList.add("hide");
@@ -254,8 +290,8 @@ function speakingStart(){
 }
 function speakingAgain(){ spStop(); speakingStart(); }
 function spStop(){
-  SP.gen++; SP.running=false;
-  if(SC.rec){ try{ SC.rec.abort(); }catch(e){} SC.rec=null; }
+  SP.gen++; SP.running=false; SP._contLang=null;
+  contListenStop();
   audStop();
 }
 function speakingLeave(){
@@ -269,6 +305,8 @@ function bindSpeaking(){
   var back=document.getElementById("spBack"); if(back) back.addEventListener("click", speakingLeave);
   var stop=document.getElementById("spStop"); if(stop) stop.addEventListener("click", speakingLeave);
   var mic=document.getElementById("spMicBtn"); if(mic) mic.addEventListener("click", spMicTap);
+  var show=document.getElementById("spShowBtn"); if(show) show.addEventListener("click", spShowTap);
+  var skip=document.getElementById("spSkipBtn"); if(skip) skip.addEventListener("click", spSkipTap);
   var again=document.getElementById("spAgain"); if(again) again.addEventListener("click", speakingAgain);
   var dn=document.getElementById("spDoneBtn"); if(dn) dn.addEventListener("click", speakingLeave);
   var host=document.getElementById("spTiles");

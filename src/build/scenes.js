@@ -147,8 +147,19 @@ function isStandalone(){
 }
 /* the last time any clip or TTS actually played, so a listen attempt can be
    correlated against the WebKit "hangs right after audio" bug above */
-var LAST_AUDIO_AT=0;
+var LAST_AUDIO_AT=0, AUDIO_BUSY=0;
 function noteAudioPlayed(){ LAST_AUDIO_AT=Date.now(); }
+/* Wrap any promise that only resolves once our own speaker output is done.
+   A continuous mic (below) is listening the whole time, including while
+   scenePlay is reading a line or the model answer out loud, so without
+   this it would try to grade its own voice. Speaking no longer plays any
+   prompt audio at all (the word or line is read, not heard), so this only
+   guards Scenes now. A count, not a flag, in case two clips are ever in
+   flight together. */
+function audioGate(p){
+  AUDIO_BUSY++;
+  return p.then(function(v){ AUDIO_BUSY--; return v; }, function(e){ AUDIO_BUSY--; throw e; });
+}
 
 /* Best known mitigation for the same WebKit bug: a short pause plus a
    throwaway getUserMedia grab before starting the recognizer. Documented as
@@ -176,6 +187,18 @@ function micPrime(delayMs){
   });
 }
 
+/* A Skip or Show-answer tap needs whatever is currently listening to end
+   right away, rather than left running out its own several-second timeout
+   in the background while the next question already starts - two
+   recognizer sessions overlapping is exactly the kind of thing this file's
+   own WebKit notes warn about. abort() fires the live attempt's onerror,
+   which runs its normal fin() cleanup (stops the mic wave, logs the
+   attempt); the caller bumping its own generation counter first, same as
+   sceneMicTap already does, is what keeps that attempt's resolved promise
+   from also advancing the round a second time. */
+function listenCancel(){
+  if(SC.rec){ try{ SC.rec.abort(); }catch(e){} }
+}
 /* One utterance. Resolves with {alts:[...]} or {alts:[], err:"..."}. Never
    rejects, never hangs: a hard timeout stops it whatever the engine does.
    lang defaults to Japanese; Speaking mode passes "en-US" for the half of its
@@ -252,12 +275,84 @@ function micReport(){
   return L.join("\n");
 }
 
+/* A persistent recognizer for an "always on" round: continuous=true, and it
+   restarts itself the moment the platform ends the session on its own -
+   both iOS and Chrome do this after a stretch of silence even in continuous
+   mode, so staying "always on" for a whole round means re-arming quietly in
+   the background rather than surfacing that as a gap. Every accepted final
+   result is handed to onFinal(alts); it is up to the caller to work out
+   which word or line that belongs to, since one session can span several of
+   them. Results that arrive while AUDIO_BUSY is set are dropped before they
+   ever reach onFinal, so the round never grades its own speaker output.
+   onStall(err), if given, fires once on a hard failure (blocked mic, no
+   recognizer) that the loop will not recover from on its own - the caller
+   falls back to a manual tap-to-speak button in that case. */
+var CONT={rec:null, gen:0, running:false, wave:null};
+function contListenStart(lang, onFinal, stateElId, onStall){
+  contListenStop();
+  var gen=++CONT.gen;
+  CONT.running=true;
+  var stateEl = stateElId ? document.getElementById(stateElId) : null;
+  CONT.wave = stateEl ? micWaveMount(stateEl) : null;
+  micWaveStart(CONT.wave ? function(levels){
+    for(var i=0;i<CONT.wave.bars.length && i<levels.length;i++){
+      CONT.wave.bars[i].style.height=Math.max(4, Math.round(levels[i]*26))+"px";
+    }
+  } : null, CONT.wave ? CONT.wave.bars.length : 10);
+  (function spin(){
+    if(gen!==CONT.gen || !CONT.running) return;
+    var C=recCtor();
+    if(!C){
+      micNote({at:Date.now(),lang:lang,sinceAudio:Date.now()-LAST_AUDIO_AT,standalone:isStandalone(),started:false,result:false,err:"unavailable"});
+      CONT.running=false; if(onStall) onStall("unavailable");
+      return;
+    }
+    var R, t0=Date.now(), started=false, blocked=false;
+    try{
+      R=new C(); SC.rec=R; CONT.rec=R;
+      R.lang=lang||"ja-JP"; R.interimResults=false; R.maxAlternatives=5; R.continuous=true;
+      R.onstart=function(){ started=true; };
+      R.onresult=function(e){
+        try{
+          var rs=e.results[e.results.length-1]; if(!rs) return;
+          // interimResults is off, so - same as the one-shot listenOnce -
+          // every result that reaches here is already final
+          var alts=[]; for(var i=0;i<rs.length;i++){ if(rs[i] && rs[i].transcript) alts.push(rs[i].transcript); }
+          if(!alts.length) return;
+          micNote({at:t0,lang:lang,sinceAudio:Date.now()-LAST_AUDIO_AT,standalone:isStandalone(),started:started,result:true,err:AUDIO_BUSY?"muted (own audio playing)":null,ms:Date.now()-t0});
+          t0=Date.now();
+          if(AUDIO_BUSY>0 || gen!==CONT.gen) return;
+          onFinal(alts);
+        }catch(x){}
+      };
+      R.onerror=function(e){
+        var err=(e&&e.error)||"error";
+        micNote({at:t0,lang:lang,sinceAudio:Date.now()-LAST_AUDIO_AT,standalone:isStandalone(),started:started,result:false,err:err,ms:Date.now()-t0});
+        if(/not-allowed|service-not-allowed/.test(err)){ blocked=true; CONT.running=false; if(onStall) onStall(err); }
+      };
+      R.onend=function(){ if(gen===CONT.gen && CONT.running && !blocked) setTimeout(spin, 150); };
+      R.start();
+    }catch(e){
+      micNote({at:t0,lang:lang,sinceAudio:Date.now()-LAST_AUDIO_AT,standalone:isStandalone(),started:false,result:false,err:"start:"+(e&&e.message||e)});
+      if(gen===CONT.gen && CONT.running) setTimeout(spin, 300);
+    }
+  })();
+}
+function contListenStop(){
+  CONT.gen++; CONT.running=false;
+  if(CONT.rec){ try{ CONT.rec.abort(); }catch(e){} CONT.rec=null; }
+  SC.rec=null;
+  micWaveStop(); if(CONT.wave){ CONT.wave.remove(); CONT.wave=null; }
+}
+
 /* ---- audio for a line ---- */
 function sceneClipKey(x){ return "sj:"+x.id; }
 function estSpeechMs(text){ return 600 + moraCount(text)*170; }
 /* play a line; resolves when it is over. The library first, the device voice if
-   the library has nothing, a timed pause if neither can play. */
-function scenePlay(x, gen){
+   the library has nothing, a timed pause if neither can play. Wrapped in
+   audioGate so a continuous mic session never grades this line's own audio. */
+function scenePlay(x, gen){ return audioGate(scenePlayRun(x, gen)); }
+function scenePlayRun(x, gen){
   var alive=function(){ return gen===SC.gen; };
   noteAudioPlayed();
   if(audOn() && S.settings.cardAudio!==false){
@@ -333,7 +428,7 @@ function sceneBrief(sc){
   reh.disabled=!ready;
   reh.textContent = ready ? "Rehearse" : "Rehearse (learn the words first)";
   document.getElementById("scMicNote").textContent = recAvailable()
-    ? "Rehearse: the phone listens after each of your lines and grades what it heard."
+    ? "Rehearse: the phone stays listening for the whole scene and grades each of your lines as you say it."
     : "This browser cannot listen, so Rehearse shows each of your lines after a pause instead of grading it.";
 }
 /* put the scene's missing words at the front of the new-card queue */
@@ -359,6 +454,16 @@ function sceneRun(mode){
   document.getElementById("scDone").hidden=true;
   document.getElementById("scStage").hidden=false;
   document.getElementById("scMicBtn").hidden=true;
+  /* one mic session for the whole rehearse - every scene line is Japanese,
+     so there is no language switch to force a restart between lines the
+     way Speaking has. sceneOnHeard works out which line a result belongs
+     to, and results are ignored on lines that are not "his line" anyway. */
+  if(mode==="rehearse" && recAvailable()){
+    contListenStart(null, sceneOnHeard, "scState", function(){
+      SC.mic="blocked";
+      document.getElementById("scMicBtn").hidden=false;
+    });
+  }
   sceneStep(gen, 0);
 }
 function sceneShow(l, x, state, extra){
@@ -372,6 +477,10 @@ function sceneShow(l, x, state, extra){
   st.className = "scstate "+state;
   hd.innerHTML = extra || "";
   document.getElementById("scProg").textContent = (SC.line+1)+" / "+SC.cur.lines.length;
+  var canBail = l.who==="you" && (state==="prompt" || state==="offline");
+  var show=document.getElementById("scShowBtn"), skip=document.getElementById("scSkipBtn");
+  if(show) show.hidden=!canBail;
+  if(skip) skip.hidden=!canBail;
 }
 function sceneStep(gen, i){
   if(gen!==SC.gen) return;
@@ -380,34 +489,56 @@ function sceneStep(gen, i){
   SC.line=i;
   var l=sc.lines[i], x=sceneLine(l);
   if(!x){ sceneStep(gen, i+1); return; }
-  if(SC.mode==="listen" || l.who==="them"){
+  if(SC.mode==="listen"){
+    // Listen mode is a full read-through: every line plays out loud,
+    // his and theirs, the same as the car.
     sceneShow(l, x, "play");
     scenePlay(x, gen).then(function(){ return wait(500); }).then(function(){ sceneStep(gen, i+1); });
     return;
   }
-  /* his line: prompt in English, listen, grade, then the model answer */
-  sceneShow(l, x, recAvailable() ? "prompt" : "offline");
-  var p = recAvailable() ? listenOnce(SC_LISTEN_MS, null, "scState") : wait(3500).then(function(){ return {alts:[], err:"unavailable"}; });
-  p.then(function(r){
-    if(gen!==SC.gen) return;
-    var g=null;
-    if(r.alts.length){ g=sceneGrade(x.kana, r.alts); SC.mic="ok"; }
-    else if(r.err && /not-allowed|service-not-allowed|start:/.test(r.err)){ SC.mic="blocked"; }
-    var rec={sid:x.id, verdict: g ? g.verdict : "none", sim: g ? g.sim : 0, heard: g ? g.heard : "", err: r.err||null};
-    SC.results.push(rec);
-    var html;
-    if(g){
-      html='<div class="scv '+g.verdict+'">'+({good:"Good",close:"Close",missed:"Not that"})[g.verdict]+'</div>'+
-           '<div class="schrd">heard <b>'+esc(g.heardRomaji||"")+'</b></div>';
-    } else if(SC.mic==="blocked"){
-      html='<div class="scv none">Microphone blocked</div><div class="schrd">allow the microphone for this site, or tap the mic on each line</div>';
-      document.getElementById("scMicBtn").hidden=false;
-    } else {
-      html='<div class="scv none">'+(r.err==="unavailable"?"No grading here":"Nothing heard")+'</div>';
-    }
+  if(l.who==="them"){
+    // Rehearse: their line sets up his turn. It is shown on screen (kana,
+    // romaji, English) rather than spoken - he reads it himself - so this
+    // just holds for as long as saying it would take, then moves on.
+    sceneShow(l, x, "play");
+    wait(estSpeechMs(x.kana)+500).then(function(){ if(gen===SC.gen) sceneStep(gen, i+1); });
+    return;
+  }
+  /* his line: prompt in Japanese, listen, grade, then the model answer.
+     When a recognizer exists, the continuous session started in sceneRun
+     is already listening; sceneOnHeard grades whatever it hears next and
+     advances from there. Nothing to kick off per line. */
+  if(!recAvailable()){
+    sceneShow(l, x, "offline");
+    var html='<div class="scv none">No grading here</div>';
     sceneShow(l, x, "grade", html);
-    return scenePlay(x, gen).then(function(){ return wait(g && g.verdict==="good" ? 700 : 1400); });
-  }).then(function(){ sceneStep(gen, i+1); });
+    scenePlay(x, gen).then(function(){ return wait(1400); }).then(function(){ if(gen===SC.gen) sceneStep(gen, i+1); });
+    return;
+  }
+  sceneShow(l, x, "prompt");
+}
+/* Grades whatever the continuous mic just heard against the line currently
+   on screen. Only meaningful mid-rehearse, on his own line, before it has
+   already been graded once - the recognizer keeps running the whole time
+   (including over "they say" lines and the model-answer readback), so
+   plenty of what reaches here is not actually his turn to speak. */
+function sceneOnHeard(alts){
+  var sc=SC.cur; if(!sc || SC.mode!=="rehearse" || SC.line<0) return;
+  var l=sc.lines[SC.line]; if(l.who!=="you") return;
+  var x=sceneLine(l); if(!x) return;
+  // a continuous session can occasionally split one utterance into two
+  // final results before the first has finished advancing the line; bump
+  // the generation the moment a result is accepted, same as sceneMicTap
+  // does, so only the latest one actually moves the round forward
+  SC.gen++; var gen=SC.gen;
+  var g=sceneGrade(x.kana, alts); SC.mic="ok";
+  if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();
+  SC.results.push({sid:x.id, verdict:g.verdict, sim:g.sim, heard:g.heard, err:null});
+  var html='<div class="scv '+g.verdict+'">'+({good:"Good",close:"Close",missed:"Not that"})[g.verdict]+'</div>'+
+           '<div class="schrd">heard <b>'+esc(g.heardRomaji||"")+'</b></div>';
+  sceneShow(l, x, "grade", html);
+  scenePlay(x, gen).then(function(){ return wait(g.verdict==="good" ? 700 : 1400); })
+    .then(function(){ if(gen===SC.gen) sceneStep(gen, SC.line+1); });
 }
 /* a tap-to-speak fallback for a phone that will not open the microphone on its own */
 function sceneMicTap(){
@@ -425,6 +556,33 @@ function sceneMicTap(){
     sceneShow(l, x, "grade", html);
     return scenePlay(x, gen).then(function(){ return wait(900); });
   }).then(function(){ sceneStep(gen, SC.line+1); });
+}
+/* Skip this line unscored - for a mic that will not cooperate, or a word he
+   just wants past. Only meaningful on his own lines, mid-listen. */
+function sceneSkipTap(){
+  var sc=SC.cur; if(!sc || SC.line<0) return;
+  var l=sc.lines[SC.line]; if(l.who!=="you") return;
+  var x=sceneLine(l); if(!x) return;
+  listenCancel();
+  var gen=++SC.gen;
+  if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();
+  SC.results.push({sid:x.id, verdict:"none", sim:0, heard:"", err:"skipped"});
+  document.getElementById("scMicBtn").hidden=true;
+  sceneStep(gen, SC.line+1);
+}
+/* Reveal the model line without grading whatever he said - same "unscored"
+   result as Skip, but shows the answer first and plays it before moving on. */
+function sceneShowTap(){
+  var sc=SC.cur; if(!sc || SC.line<0) return;
+  var l=sc.lines[SC.line]; if(l.who!=="you") return;
+  var x=sceneLine(l); if(!x) return;
+  listenCancel();
+  var gen=++SC.gen;
+  if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();
+  SC.results.push({sid:x.id, verdict:"none", sim:0, heard:"", err:"shown"});
+  document.getElementById("scMicBtn").hidden=true;
+  sceneShow(l, x, "grade", '<div class="scv none">Answer</div><div class="schrd">'+esc(x.romaji)+'</div>');
+  scenePlay(x, gen).then(function(){ return wait(1400); }).then(function(){ sceneStep(gen, SC.line+1); });
 }
 function sceneFinish(gen){
   if(gen!==SC.gen) return;
@@ -456,7 +614,7 @@ function sceneFinish(gen){
   }
   list.innerHTML=html;
 }
-function sceneStop(){ SC.gen++; if(SC.rec){ try{ SC.rec.abort(); }catch(e){} SC.rec=null; } audStop(); }
+function sceneStop(){ SC.gen++; contListenStop(); audStop(); }
 function sceneBack(){
   sceneStop();
   if(!document.getElementById("scOne").hidden){ scenesStart(); return; }
@@ -470,6 +628,8 @@ function bindScenes(){
   var li=document.getElementById("scListen"); if(li) li.addEventListener("click",function(){ sceneRun("listen"); });
   var re=document.getElementById("scRehearse"); if(re) re.addEventListener("click",function(){ sceneRun("rehearse"); });
   var mic=document.getElementById("scMicBtn"); if(mic) mic.addEventListener("click",sceneMicTap);
+  var show=document.getElementById("scShowBtn"); if(show) show.addEventListener("click",sceneShowTap);
+  var skip=document.getElementById("scSkipBtn"); if(skip) skip.addEventListener("click",sceneSkipTap);
   var again=document.getElementById("scAgain"); if(again) again.addEventListener("click",function(){ sceneRun("rehearse"); });
   var dn=document.getElementById("scDoneBtn"); if(dn) dn.addEventListener("click",function(){ sceneStop(); sceneOpen(SC.cur.id); });
   var stop=document.getElementById("scStop"); if(stop) stop.addEventListener("click",function(){ sceneStop(); sceneOpen(SC.cur.id); });
