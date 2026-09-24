@@ -15,23 +15,33 @@ const base=(items)=>({rev:9,
    weakness() looks for, so weakWords() and speakingWords() both pick it up */
 const weak=(now)=>[1,0,4,2.0,3,now+259200000,2,0,4,1,6.0,3.0,now];
 
-/* a recogniser that answers with whatever the test scripted next */
+/* a recogniser whose answers the test delivers on demand, via __recSay,
+   rather than off a blind timer - the same way a real person only speaks
+   once the prompt is actually on screen, never on a schedule racing the
+   app's own pacing. undefined = nothing heard, null = permission denied.
+   A one-shot session ends itself either way; a continuous one (Speaking's
+   mic, which stays open across a whole same-direction block of words)
+   keeps listening for the next call instead, exactly like the real API. */
 const fakeRec=()=>{
-  window.__recScript=[]; window.__recStarts=0; window.__recLangs=[];
+  window.__recStarts=0; window.__recLangs=[]; window.__recActive=null;
   window.SpeechRecognition=window.webkitSpeechRecognition=function(){
-    const R=this; R.lang=""; R.start=function(){ window.__recStarts++; window.__recLangs.push(R.lang);
-      const next=window.__recScript.shift();
-      setTimeout(function(){
-        if(next===undefined){ R.onerror&&R.onerror({error:'no-speech'}); R.onend&&R.onend(); return; }
-        if(next===null){ R.onerror&&R.onerror({error:'not-allowed'}); R.onend&&R.onend(); return; }
-        const alts=(Array.isArray(next)?next:[next]).map(t=>({transcript:t,confidence:0.9}));
-        R.onresult&&R.onresult({results:[alts]}); R.onend&&R.onend();
-      },60); };
-    R.stop=function(){}; R.abort=function(){};
+    const R=this; R.lang=""; R.continuous=false;
+    R.start=function(){ window.__recStarts++; window.__recLangs.push(R.lang); window.__recActive=R; };
+    R.stop=function(){ if(window.__recActive===R) window.__recActive=null; };
+    R.abort=function(){ if(window.__recActive===R) window.__recActive=null; R.onend&&R.onend(); };
   };
   window.__spoke=[];
   window.SpeechSynthesisUtterance=function(t){this.text=t;this.rate=1;};
   try{ speechSynthesis.speak=u=>{ window.__spoke.push(u.text); setTimeout(()=>{u.onstart&&u.onstart(); u.onend&&u.onend();},5); }; speechSynthesis.cancel=()=>{}; }catch(e){}
+  window.__recSay=function(next){
+    const R=window.__recActive; if(!R) return false;
+    if(next===undefined){ R.onerror&&R.onerror({error:'no-speech'}); if(!R.continuous) window.__recActive=null; R.onend&&R.onend(); return true; }
+    if(next===null){ R.onerror&&R.onerror({error:'not-allowed'}); window.__recActive=null; R.onend&&R.onend(); return true; }
+    const alts=(Array.isArray(next)?next:[next]).map(t=>({transcript:t,confidence:0.9}));
+    R.onresult&&R.onresult({results:[alts]});
+    if(!R.continuous){ window.__recActive=null; R.onend&&R.onend(); }
+    return true;
+  };
 };
 
 (async()=>{
@@ -115,21 +125,40 @@ console.log('\n3. wrong turns a ticket red and asks again; right turns it green 
   await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
   await p.evaluate(()=>{
     const k=window.__kl;
-    // three words, directions fixed by hand so the script below is deterministic
+    // three words, directions fixed by hand so the script below is deterministic -
+    // each direction differs from the one before it, so the mic reopens at
+    // every word here (a grouped round, as speakingStart now builds, would
+    // not reopen between two words that share a direction)
     k.SP.ids=['c0000','c0001','c0004']; k.SP.dir={c0000:'e',c0001:'j',c0004:'e'};
     k.SP.state={}; k.SP.cur=-1; k.SP.running=true; k.go('speak');
-    // word0 (say こんにちは): wrong, then right. word1 (say "good morning"): right first try.
-    // word2 (say さようなら): right first try.
-    window.__recScript=['さようなら','こんにちは','good morning','さようなら'];
     k.spAsk(0);
   });
+  // word0 (say こんにちは): wrong, then right. word1 (say "good morning"): right
+  // first try. word2 (say さようなら): right first try. Each answer is "said"
+  // only once the app is actually listening IN THAT WORD'S OWN LANGUAGE -
+  // checking the active recognizer's lang, not just whose turn it is, is
+  // what proves the language-block restart actually happened rather than
+  // catching the previous word's session still lingering before it swaps.
+  async function say(i, text, lang){
+    await p.waitForFunction((a)=>{ const k=window.__kl;
+      return !!window.__recActive && k.SP.cur===a.i && window.__recActive.lang===a.lang;
+    }, {i,lang}, {timeout:20000});
+    await p.evaluate((t)=>window.__recSay(t), text);
+  }
+  await say(0, 'さようなら', 'ja-JP');
+  await p.waitForFunction(()=>window.__kl.SP.state[0]==='bad',null,{timeout:20000});
+  await say(0, 'こんにちは', 'ja-JP');
+  await p.waitForFunction(()=>window.__kl.SP.state[0]==='good',null,{timeout:20000});
+  await say(1, 'good morning', 'en-US');
+  await p.waitForFunction(()=>window.__kl.SP.state[1]==='good',null,{timeout:20000});
+  await say(2, 'さようなら', 'ja-JP');
   await p.waitForFunction(()=>!document.getElementById('spDone').hidden,null,{timeout:20000});
   const r=await p.evaluate(()=>{ const k=window.__kl;
     const tiles=Array.prototype.map.call(document.querySelectorAll('#spTiles .sptile'),t=>t.className);
     return {starts:window.__recStarts, state:k.SP.state, head:document.getElementById('spDoneHead').textContent,
       sub:document.getElementById('spDoneSub').textContent, tiles:tiles};
   });
-  ok(r.starts===4,'the phone listened four times: one retry, three first tries ('+r.starts+')');
+  ok(r.starts===3,'the mic reopened once per direction change, not once per attempt ('+r.starts+')');
   ok(r.state[0]==='good' && r.state[1]==='good' && r.state[2]==='good','all three end up correct ('+JSON.stringify(r.state)+')');
   ok(/3 of 3/.test(r.sub),'the round reports three of three ('+r.sub+')');
   ok(r.tiles.every(c=>/s-good/.test(c)),'every ticket ends up green, even the one that was wrong first ('+r.tiles.join(' | ')+')');
@@ -153,9 +182,10 @@ console.log('\n4. the wrong colour shows before the question repeats');
   await p.evaluate(()=>{
     const k=window.__kl;
     k.SP.ids=['c0000']; k.SP.dir={c0000:'e'}; k.SP.state={}; k.SP.cur=-1; k.SP.running=true; k.go('speak');
-    window.__recScript=['さようなら'];   // wrong, and nothing queued after it
     k.spAsk(0);
   });
+  await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('さようなら'));   // wrong
   await p.waitForFunction(()=>window.__kl.SP.state[0]==='bad',null,{timeout:20000});
   const mid=await p.evaluate(()=>{
     const t=document.querySelector('#spTiles .sptile[data-i="0"]');
@@ -163,9 +193,10 @@ console.log('\n4. the wrong colour shows before the question repeats');
   });
   ok(/s-bad/.test(mid.cls),'the ticket is red right after the wrong answer ('+mid.cls+')');
   ok(/Not that/.test(mid.heard),'and it says the answer was not right');
-  await p.evaluate(()=>{ window.__recScript=['こんにちは']; });
+  await p.evaluate(()=>window.__recSay('こんにちは'));   // same continuous session, no restart needed
   await p.waitForFunction(()=>window.__kl.SP.state[0]==='good',null,{timeout:20000});
-  ok(true,'and it retries the same word on its own until it is said correctly');
+  const starts=await p.evaluate(()=>window.__recStarts);
+  ok(starts===1,'it retries the same word on the mic already open, without reopening it ('+starts+')');
   await ctx.close();
 }
 
@@ -258,8 +289,8 @@ console.log('\n7. even the longest word, gloss or greeting in the deck stays on 
   await ctx.close();
 }
 
-/* ---------- 8. a dead microphone stops retrying and says so, instead of listening forever ---------- */
-console.log('\n8. a microphone that never hears anything gives up and says so, instead of listening forever');
+/* ---------- 8. total silence never makes the mic give up, it just says so and keeps listening ---------- */
+console.log('\n8. total silence never makes the mic give up - it says so plainly and keeps listening');
 {
   const ctx=await b.newContext({viewport:{width:393,height:852}});
   await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
@@ -270,22 +301,30 @@ console.log('\n8. a microphone that never hears anything gives up and says so, i
   await p.evaluate(()=>{
     const k=window.__kl;
     k.SP.ids=['c0000']; k.SP.dir={c0000:'e'}; k.SP.state={}; k.SP.cur=-1; k.SP.running=true; k.go('speak');
-    window.__recScript=[]; // every attempt resolves with no-speech, forever, until the app stops asking
     k.spAsk(0);
   });
-  await p.waitForFunction(()=>window.__kl.SP.mic==='stuck',null,{timeout:20000});
+  await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+  // nobody says anything at all for longer than one listen window
+  await p.waitForFunction(()=>/Still not hearing you/.test(document.getElementById('spState').textContent),null,{timeout:10000});
   const r=await p.evaluate(()=>({
     starts:window.__recStarts,
     state:document.getElementById('spState').textContent,
-    micHidden:document.getElementById('spMicBtn').hidden
+    cur:window.__kl.SP.cur,
+    micHidden:document.getElementById('spMicBtn').hidden,
+    showHidden:document.getElementById('spShowBtn').hidden,
+    skipHidden:document.getElementById('spSkipBtn').hidden
   }));
-  ok(r.starts===3,'it tries a bounded number of times, not forever ('+r.starts+')');
-  ok(/Not hearing you/.test(r.state),'and says plainly that nothing is being heard ('+r.state+')');
-  ok(!r.micHidden,'and offers the tap-to-speak fallback instead of hanging on "listening" ('+r.micHidden+')');
-  // it does not start a fourth time on its own
-  await p.waitForTimeout(700);
-  const still=await p.evaluate(()=>window.__recStarts);
-  ok(still===3,'and it really has stopped, not just paused between retries ('+still+')');
+  ok(r.starts===1,'the mic opened once and just kept listening through the silence, no restart ('+r.starts+')');
+  ok(/Still not hearing you/.test(r.state),'and says plainly that nothing is being heard ('+r.state+')');
+  ok(r.cur===0,'the word has not been failed or skipped on its own ('+r.cur+')');
+  ok(!r.showHidden && !r.skipHidden,'Show answer and Skip are there as the way past it ('+r.showHidden+','+r.skipHidden+')');
+  ok(r.micHidden,'the tap-to-speak button stays hidden - this is silence, not a blocked mic ('+r.micHidden+')');
+  // the session never actually died: saying it now still grades normally,
+  // on the same mic, with no reopen
+  await p.evaluate(()=>window.__recSay('こんにちは'));
+  await p.waitForFunction(()=>window.__kl.SP.state[0]==='good',null,{timeout:20000});
+  const starts2=await p.evaluate(()=>window.__recStarts);
+  ok(starts2===1,'and it was the same open mic that finally heard it ('+starts2+')');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();
 }

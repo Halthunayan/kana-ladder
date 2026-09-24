@@ -14,23 +14,33 @@ const base=(items)=>({rev:9,
   hist:{}, streak:{cur:2,best:2,last:""}, life:{ans:100,ok:90,practice:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{},
   checks:[], log:[], items:items||{}});
 
-/* a recogniser that answers with whatever the test scripted next */
+/* a recogniser whose answers the test delivers on demand, via __recSay,
+   rather than off a blind timer - the same way a real person only speaks
+   once the prompt is actually on screen, never on a schedule racing the
+   app's own pacing. undefined = nothing heard, null = permission denied.
+   A one-shot session ends itself either way; a continuous one (the
+   rehearse mic, which stays open for the whole scene) keeps listening for
+   the next call instead, exactly like the real API. */
 const fakeRec=()=>{
-  window.__recScript=[]; window.__recStarts=0;
+  window.__recStarts=0; window.__recActive=null;
   window.SpeechRecognition=window.webkitSpeechRecognition=function(){
-    const R=this; R.lang=""; R.start=function(){ window.__recStarts++;
-      const next=window.__recScript.shift();
-      setTimeout(function(){
-        if(next===undefined){ R.onerror&&R.onerror({error:'no-speech'}); R.onend&&R.onend(); return; }
-        if(next===null){ R.onerror&&R.onerror({error:'not-allowed'}); R.onend&&R.onend(); return; }
-        const alts=(Array.isArray(next)?next:[next]).map(t=>({transcript:t,confidence:0.9}));
-        R.onresult&&R.onresult({results:[alts]}); R.onend&&R.onend();
-      },60); };
-    R.stop=function(){}; R.abort=function(){};
+    const R=this; R.lang=""; R.continuous=false;
+    R.start=function(){ window.__recStarts++; window.__recActive=R; };
+    R.stop=function(){ if(window.__recActive===R) window.__recActive=null; };
+    R.abort=function(){ if(window.__recActive===R) window.__recActive=null; R.onend&&R.onend(); };
   };
   window.__spoke=[];
   window.SpeechSynthesisUtterance=function(t){this.text=t;this.rate=1;};
   try{ speechSynthesis.speak=u=>{ window.__spoke.push(u.text); setTimeout(()=>{u.onstart&&u.onstart(); u.onend&&u.onend();},5); }; speechSynthesis.cancel=()=>{}; }catch(e){}
+  window.__recSay=function(next){
+    const R=window.__recActive; if(!R) return false;
+    if(next===undefined){ R.onerror&&R.onerror({error:'no-speech'}); if(!R.continuous) window.__recActive=null; R.onend&&R.onend(); return true; }
+    if(next===null){ R.onerror&&R.onerror({error:'not-allowed'}); window.__recActive=null; R.onend&&R.onend(); return true; }
+    const alts=(Array.isArray(next)?next:[next]).map(t=>({transcript:t,confidence:0.9}));
+    R.onresult&&R.onresult({results:[alts]});
+    if(!R.continuous){ window.__recActive=null; R.onend&&R.onend(); }
+    return true;
+  };
 };
 
 (async()=>{
@@ -116,8 +126,9 @@ console.log('\n3. rehearse: their lines play, his lines are heard, nothing needs
     const words=new Set(); sc.lines.forEach(l=>k.SIDX[l.sid].w.forEach(w=>words.add(w)));
     const now=Date.now();
     words.forEach(w=>{ k.S.items[w+'|j']={s:1,st:0,n:4,ef:2.5,iv:20,due:now+864000000,lapses:0,piv:0,seen:6,ok:6,df:0.3,sb:8,lr:0}; });
-    const you=sc.lines.filter(l=>l.who==='you').map(l=>k.SIDX[l.sid].kana);
-    window.__recScript = [ you[0], 'えいごのメニューはありますか', you[2] ];   // right, wrong, right
+    const you=sc.lines.map((l,i)=>({i,kana:k.SIDX[l.sid].kana})).filter((x,j)=>sc.lines[x.i].who==='you');
+    window.__youLineIdx=you.map(x=>x.i);
+    window.__youAnswers=[you[0].kana, 'えいごのメニューはありますか', you[2].kana];   // right, wrong, right
     return {ready:k.sceneReady(sc), you:you.length};
   });
   ok(prep.ready,'the scene is open once its words are known');
@@ -134,15 +145,27 @@ console.log('\n3. rehearse: their lines play, his lines are heard, nothing needs
   ok(brief.lines===7,'and lists all of its lines ('+brief.lines+')');
   ok(brief.reh===false,'Rehearse is enabled');
   await p.click('#scRehearse');
+  // one line at a time: wait until the rehearse is actually prompting for
+  // that exact line before "saying" its answer, rather than firing all
+  // three on a timer and hoping the pacing lines up
+  const idxs=await p.evaluate(()=>window.__youLineIdx), answers=await p.evaluate(()=>window.__youAnswers);
+  for(let k=0;k<idxs.length;k++){
+    await p.waitForFunction((i)=>{ const kl=window.__kl;
+      return !!kl && kl.SC.line===i && /prompt/.test(document.getElementById('scState').className);
+    }, idxs[k], {timeout:20000});
+    await p.evaluate((t)=>window.__recSay(t), answers[k]);
+  }
   await p.waitForFunction(()=>!document.getElementById('scDone').hidden,null,{timeout:30000});
   const r=await p.evaluate(()=>{ const k=window.__kl;
     return {starts:window.__recStarts, results:k.SC.results.map(x=>x.verdict), head:document.getElementById('scDoneHead').textContent,
       saved:k.S.scenes&&k.S.scenes.sc08, plays:k.AUD.log.filter(x=>/^sj:/.test(x.k)).length}; });
-  ok(r.starts===3,'the phone listened once per line of his, with no tap ('+r.starts+')');
+  ok(r.starts===1,'the phone opened the mic once for the whole rehearsal, not once per line ('+r.starts+')');
   ok(JSON.stringify(r.results)==='["good","missed","good"]','graded right, wrong, right ('+JSON.stringify(r.results)+')');
   ok(/^67%$/.test(r.head),'the score is shown ('+r.head+')');
   ok(r.saved && Math.abs(r.saved.last-2/3)<0.01 && r.saved.n===1,'and saved for the scene ('+JSON.stringify(r.saved)+')');
-  ok(r.plays>=7,'every line was played from the library, his as the model answer ('+r.plays+')');
+  // their lines (4 of the scene's 7) are shown on screen, not spoken - only
+  // his own 3 lines play, as the model-answer readback after each is graded
+  ok(r.plays===3,'only his lines played, as the model answer - theirs are read, not heard ('+r.plays+')');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();
 }
