@@ -581,15 +581,17 @@ button.drill:active{transform:scale(.98);background:var(--paper-2)}
 @media (prefers-reduced-motion:reduce){.scstate.prompt::before{animation:none}}
 .scheard{min-height:40px}
 .scv{display:inline-block;font-size:14px;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid var(--rule)}
-.scv.good{color:var(--ohdo);border-color:var(--ohdo)}
+.scv.good{color:var(--matcha);border-color:var(--matcha)}
 .scv.close{color:var(--ink-2)}
 .scv.missed{color:var(--bad,#b3402d);border-color:currentColor}
 .scv.none{color:var(--ink-3)}
 .schrd{font-size:13px;color:var(--ink-3);margin-top:6px}
 .scmic,.scstop{margin-top:10px}
+.scacts-inline{max-width:280px;margin-top:4px}
+.scacts-inline .btn{padding:9px 0;font-size:13.5px}
 .screslist{display:flex;flex-direction:column;gap:6px;margin:12px 0}
 .scres{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;background:var(--paper-2);font-size:13px}
-.scres.good{border-left:3px solid var(--ohdo)}
+.scres.good{border-left:3px solid var(--matcha)}
 .scres.missed{border-left:3px solid var(--bad,#b3402d)}
 .scres.close{border-left:3px solid var(--ink-3)}
 .scres .hd{color:var(--ink-3)}
@@ -600,7 +602,7 @@ button.drill:active{transform:scale(.98);background:var(--paper-2)}
 .sptile{aspect-ratio:1;border-radius:9px;border:1px solid var(--rule);background:var(--paper-2);cursor:pointer;padding:0}
 .sptile.s-pend{opacity:.55}
 .sptile.s-cur{border-color:var(--ohdo);animation:scpulse 1s ease-in-out infinite}
-.sptile.s-good{background:var(--ohdo);border-color:var(--ohdo)}
+.sptile.s-good{background:var(--matcha);border-color:var(--matcha)}
 .sptile.s-bad{background:var(--bad,#b3402d);border-color:var(--bad,#b3402d)}
 .sptile.s-skip{background:var(--ink-3);border-color:var(--ink-3);opacity:.6}
 @media (prefers-reduced-motion:reduce){.sptile.s-cur{animation:none}}
