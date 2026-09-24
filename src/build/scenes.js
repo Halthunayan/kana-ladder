@@ -14,6 +14,29 @@ var SCENES = JSON.parse(document.getElementById("scenes-data").textContent);
 var KANJI_TBL = JSON.parse(document.getElementById("kanji-data").textContent);
 var SC = {cur:null, mode:null, gen:0, rec:null, results:[], line:-1, busy:false, mic:"untried"};
 var SC_PASS=0.75, SC_CLOSE=0.55, SC_LISTEN_MS=7000;
+/* Shared by Scenes and Speaking: three tries at a word or line before the
+   correct answer is shown for him to review, and how long that reveal
+   holds before moving on. */
+var MAX_TRIES=3, REVEAL_MS=4000;
+/* good/close/missed maps to a percentage grade shown to him - the numbers
+   he asked for (100 when it's right, a lower number the further off a
+   wrong attempt was). "none" (skipped, shown, nothing heard, no
+   microphone) has no percentage - there was nothing said to grade. Shared
+   by Scenes and Speaking, which both grade to this same three-tier scale,
+   just at different similarity thresholds. */
+function verdictPct(v){ return v==="good"?100:(v==="close"?70:(v==="missed"?50:null)); }
+/* The history's colour is a different question from the grade above: not
+   how close the answer was, but how easily it came. Right first try is
+   green. Right on the second or third try is yellow - it counts the same
+   as a first-try pass for the grade, but took more than one attempt. Never
+   right in three tries is red, whether the last attempt was close or
+   nowhere near. Skipped, shown, or nothing heard is neither - grey, same
+   as "none" carries elsewhere. */
+function historyColor(verdict, tries){
+  if(verdict==="good") return tries<=1 ? "good" : "retry";
+  if(verdict==="close" || verdict==="missed") return "bad";
+  return "none";
+}
 
 function sceneById(id){ for(var i=0;i<SCENES.length;i++) if(SCENES[i].id===id) return SCENES[i]; return null; }
 function sceneLine(l){ return SIDX[l.sid]; }
@@ -449,7 +472,7 @@ function scenePruneWant(){
 function sceneRun(mode){
   var sc=SC.cur; if(!sc) return;
   if(mode==="rehearse" && !sceneReady(sc)){ toast("Learn the missing words first"); return; }
-  var gen=++SC.gen; SC.mode=mode; SC.results=[]; SC.line=-1;
+  var gen=++SC.gen; SC.mode=mode; SC.results=[]; SC.line=-1; SC._failSid=null; SC._tries=0;
   document.getElementById("scBrief").hidden=true;
   document.getElementById("scDone").hidden=true;
   document.getElementById("scStage").hidden=false;
@@ -521,7 +544,13 @@ function sceneStep(gen, i){
    on screen. Only meaningful mid-rehearse, on his own line, before it has
    already been graded once - the recognizer keeps running the whole time
    (including over "they say" lines and the model-answer readback), so
-   plenty of what reaches here is not actually his turn to speak. */
+   plenty of what reaches here is not actually his turn to speak.
+
+   Right advances straight away. Wrong gets up to MAX_TRIES total (this one
+   plus two more) on the same line, the mic already open - no restart
+   needed. The third wrong attempt reveals the line and holds for REVEAL_MS
+   so there is real time to read it, rather than snapping straight to the
+   next line. */
 function sceneOnHeard(alts){
   var sc=SC.cur; if(!sc || SC.mode!=="rehearse" || SC.line<0) return;
   var l=sc.lines[SC.line]; if(l.who!=="you") return;
@@ -532,15 +561,40 @@ function sceneOnHeard(alts){
   // does, so only the latest one actually moves the round forward
   SC.gen++; var gen=SC.gen;
   var g=sceneGrade(x.kana, alts); SC.mic="ok";
+  // the try count is per line, not per call - it must only reset when the
+  // LINE changes, never on every result, or a retry could never count past one
+  if(SC._failSid!==x.id){ SC._failSid=x.id; SC._tries=0; }
+  SC._tries++;
   if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();
-  SC.results.push({sid:x.id, verdict:g.verdict, sim:g.sim, heard:g.heard, err:null});
-  var html='<div class="scv '+g.verdict+'">'+({good:"Good",close:"Close",missed:"Not that"})[g.verdict]+'</div>'+
-           '<div class="schrd">heard <b>'+esc(g.heardRomaji||"")+'</b></div>';
-  sceneShow(l, x, "grade", html);
-  scenePlay(x, gen).then(function(){ return wait(g.verdict==="good" ? 700 : 1400); })
-    .then(function(){ if(gen===SC.gen) sceneStep(gen, SC.line+1); });
+  SC.results.push({sid:x.id, verdict:g.verdict, sim:g.sim, heard:g.heard, err:null, tries:SC._tries});
+  var label=({good:"Good",close:"Close",missed:"Not that"})[g.verdict];
+  if(g.verdict==="good"){
+    SC._tries=0;
+    var html='<div class="scv good">Good</div><div class="schrd">heard <b>'+esc(g.heardRomaji||"")+'</b></div>';
+    sceneShow(l, x, "grade", html);
+    scenePlay(x, gen).then(function(){ return wait(700); }).then(function(){ if(gen===SC.gen) sceneStep(gen, SC.line+1); });
+    return;
+  }
+  if(SC._tries<MAX_TRIES){
+    var rhtml='<div class="scv '+g.verdict+'">'+label+'</div>'+
+      '<div class="schrd">heard <b>'+esc(g.heardRomaji||"")+'</b> &middot; try again ('+SC._tries+' of '+MAX_TRIES+')</div>';
+    sceneShow(l, x, "grade", rhtml);
+    // the mic is still the same open session - just go back to prompting
+    // for this same line once he has had a moment to read the feedback
+    setTimeout(function(){ if(gen===SC.gen) sceneShow(l, x, "prompt"); }, 1000);
+    return;
+  }
+  // out of tries: reveal the line and hold, then move on
+  SC._tries=0;
+  var fhtml='<div class="scv missed">Answer</div><div class="schrd">'+esc(x.romaji)+'</div>'+
+    '<div class="schrd">you said <b>'+esc(g.heardRomaji||"nothing clear")+'</b></div>';
+  sceneShow(l, x, "grade", fhtml);
+  scenePlay(x, gen).then(function(){ return wait(REVEAL_MS); }).then(function(){ if(gen===SC.gen) sceneStep(gen, SC.line+1); });
 }
-/* a tap-to-speak fallback for a phone that will not open the microphone on its own */
+/* a tap-to-speak fallback for a phone that will not open the microphone on
+   its own - same right-advances / wrong-retries-up-to-MAX_TRIES rule as the
+   continuous path above, just one explicit tap per attempt instead of the
+   mic staying open on its own. */
 function sceneMicTap(){
   var gen=SC.gen, sc=SC.cur; if(!sc || SC.line<0) return;
   var l=sc.lines[SC.line], x=sceneLine(l); if(l.who!=="you") return;
@@ -548,14 +602,36 @@ function sceneMicTap(){
   sceneShow(l, x, "prompt");
   listenOnce(SC_LISTEN_MS, null, "scState").then(function(r){
     if(gen!==SC.gen) return;
-    var g = r.alts.length ? sceneGrade(x.kana, r.alts) : null;
+    if(!r.alts.length){
+      // nothing heard is not an attempt to grade - unscored, moves on
+      if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();
+      SC.results.push({sid:x.id, verdict:"none", sim:0, heard:"", err:r.err||null});
+      SC._tries=0;
+      sceneShow(l, x, "grade", '<div class="scv none">Nothing heard</div>');
+      return scenePlay(x, gen).then(function(){ return wait(900); }).then(function(){ if(gen===SC.gen) sceneStep(gen, SC.line+1); });
+    }
+    var g=sceneGrade(x.kana, r.alts);
+    if(SC._failSid!==x.id){ SC._failSid=x.id; SC._tries=0; }
+    SC._tries++;
     if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();
-    SC.results.push({sid:x.id, verdict:g?g.verdict:"none", sim:g?g.sim:0, heard:g?g.heard:"", err:r.err||null});
-    var html = g ? '<div class="scv '+g.verdict+'">'+({good:"Good",close:"Close",missed:"Not that"})[g.verdict]+'</div><div class="schrd">heard <b>'+esc(g.heardRomaji||"")+'</b></div>'
-                 : '<div class="scv none">Nothing heard</div>';
-    sceneShow(l, x, "grade", html);
-    return scenePlay(x, gen).then(function(){ return wait(900); });
-  }).then(function(){ sceneStep(gen, SC.line+1); });
+    SC.results.push({sid:x.id, verdict:g.verdict, sim:g.sim, heard:g.heard, err:null, tries:SC._tries});
+    var label=({good:"Good",close:"Close",missed:"Not that"})[g.verdict];
+    if(g.verdict==="good"){
+      SC._tries=0;
+      sceneShow(l, x, "grade", '<div class="scv good">Good</div><div class="schrd">heard <b>'+esc(g.heardRomaji||"")+'</b></div>');
+      return scenePlay(x, gen).then(function(){ return wait(700); }).then(function(){ if(gen===SC.gen) sceneStep(gen, SC.line+1); });
+    }
+    if(SC._tries<MAX_TRIES){
+      sceneShow(l, x, "grade", '<div class="scv '+g.verdict+'">'+label+'</div>'+
+        '<div class="schrd">heard <b>'+esc(g.heardRomaji||"")+'</b> &middot; try again ('+SC._tries+' of '+MAX_TRIES+')</div>');
+      document.getElementById("scMicBtn").hidden=false;
+      return;
+    }
+    SC._tries=0;
+    sceneShow(l, x, "grade", '<div class="scv missed">Answer</div><div class="schrd">'+esc(x.romaji)+'</div>'+
+      '<div class="schrd">you said <b>'+esc(g.heardRomaji||"nothing clear")+'</b></div>');
+    return scenePlay(x, gen).then(function(){ return wait(REVEAL_MS); }).then(function(){ if(gen===SC.gen) sceneStep(gen, SC.line+1); });
+  });
 }
 /* Skip this line unscored - for a mic that will not cooperate, or a word he
    just wants past. Only meaningful on his own lines, mid-listen. */
@@ -564,7 +640,7 @@ function sceneSkipTap(){
   var l=sc.lines[SC.line]; if(l.who!=="you") return;
   var x=sceneLine(l); if(!x) return;
   listenCancel();
-  var gen=++SC.gen;
+  var gen=++SC.gen; SC._tries=0;
   if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();
   SC.results.push({sid:x.id, verdict:"none", sim:0, heard:"", err:"skipped"});
   document.getElementById("scMicBtn").hidden=true;
@@ -577,7 +653,7 @@ function sceneShowTap(){
   var l=sc.lines[SC.line]; if(l.who!=="you") return;
   var x=sceneLine(l); if(!x) return;
   listenCancel();
-  var gen=++SC.gen;
+  var gen=++SC.gen; SC._tries=0;
   if(SC.results.length && SC.results[SC.results.length-1].sid===x.id) SC.results.pop();
   SC.results.push({sid:x.id, verdict:"none", sim:0, heard:"", err:"shown"});
   document.getElementById("scMicBtn").hidden=true;
@@ -608,11 +684,24 @@ function sceneFinish(gen){
       (S.scenes[sc.id].best>score ? ". Best so far "+Math.round(S.scenes[sc.id].best*100)+"%." : ".");
   }
   var html="";
-  for(var i=0;i<SC.results.length;i++){ var r=SC.results[i], x=SIDX[r.sid]; if(!x) continue;
-    html+='<div class="scres '+r.verdict+'"><span class="rm">'+esc(x.romaji)+'</span>'+
-      (r.heard ? '<span class="hd">heard '+esc(heardRomaji(r.heard, r.verdict, x.kana))+'</span>' : '')+'</div>';
-  }
+  for(var i=0;i<SC.results.length;i++){ html+=sceneHistRow(SC.results[i]); }
   list.innerHTML=html;
+}
+/* One row of the rehearsed-scene history: what he was asked, the correct
+   line, what he actually said (his last attempt, if the line took more
+   than one), and a numeric grade - replacing a plain colour swatch with
+   the four things he asked to see. */
+function sceneHistRow(r){
+  var x=SIDX[r.sid]; if(!x) return "";
+  var pct=verdictPct(r.verdict), gradeTxt = pct!=null ? pct+"%" : "—";
+  var heardTxt = r.err==="skipped" ? "Skipped" : r.err==="shown" ? "Shown" :
+    (r.heard ? heardRomaji(r.heard, r.verdict, x.kana) : "Nothing heard");
+  return '<div class="scres '+historyColor(r.verdict, r.tries||0)+'">'+
+    '<div class="scres-q"><span class="lbl">You say</span><b>'+esc(x.en)+'</b></div>'+
+    '<div class="scres-a"><span class="lbl">Correct</span><b>'+esc(x.romaji)+'</b></div>'+
+    '<div class="scres-h"><span class="lbl">You said</span><b>'+esc(heardTxt)+'</b></div>'+
+    '<div class="scres-g">'+gradeTxt+'</div>'+
+  '</div>';
 }
 function sceneStop(){ SC.gen++; contListenStop(); audStop(); }
 function sceneBack(){

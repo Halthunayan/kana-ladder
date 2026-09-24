@@ -9,14 +9,23 @@
    shown on screen, kana and romaji or the English gloss - never spoken
    aloud, since he reads it himself; the pause before the mic opens just
    holds for as long as reading it would take. Say the answer: right turns
-   that ticket green and moves on, wrong turns it red and asks the same
-   word again, no click either way. Stuck on one word: Show answer or Skip
+   that ticket green, grades 100%, and moves on. Wrong turns it red, grades
+   70% or 50% by how close it was, and asks the same word again - up to
+   three tries total. A third wrong try reveals the answer and holds for a
+   few seconds before moving on. Stuck on one word: Show answer or Skip
    move past it unscored. Tapping any ticket that has been asked shows
-   what it was. Nothing here touches the schedule, the same as Focus and
-   the car. */
+   the question, the correct answer, what he actually said, and its grade -
+   the same history the finish screen lists for the whole round. Nothing
+   here touches the schedule, the same as Focus and the car. */
 var SP_WORDS=12, SP_LISTEN_MS=6000;
 var SP_PASS_JA=0.62, SP_PASS_EN=0.6;
-var SP={ids:[], dir:{}, state:{}, cur:-1, gen:0, running:false, mic:"untried"};
+/* a middle "close" band below pass, for a numeric grade rather than a flat
+   pass/fail - same proportional gap Scenes keeps between its own pass and
+   close thresholds (0.75 to 0.55), scaled down to these lower single-word
+   bars. MAX_TRIES and REVEAL_MS are shared with Scenes, declared there. */
+var SP_CLOSE_JA=0.42, SP_CLOSE_EN=0.4;
+var SP={ids:[], dir:{}, state:{}, cur:-1, gen:0, running:false, mic:"untried",
+  tries:{}, heard:{}, grade:{}, verdict:{}, reason:{}};
 
 function spCard(id){ return IDX[id]; }
 /* the same weak-word pool Focus draws its round from, so "the words in
@@ -84,7 +93,9 @@ function spGradeJa(targetKana, alts){
 /* ---- the board ---- */
 function spTileClass(i){
   var st=SP.state[i];
-  if(st==="good") return "good";
+  // right first try is green; right on the second or third try is yellow -
+  // the same pass for the grade, but it took more than one attempt
+  if(st==="good") return (SP.tries[i]||1)<=1 ? "good" : "retry";
   if(st==="bad") return "bad";
   if(st==="skip") return "skip";
   return i===SP.cur ? "cur" : "pend";
@@ -99,15 +110,37 @@ function spRenderTiles(){
   host.innerHTML=html;
   var n=document.getElementById("spProg"); if(n) n.textContent=(SP.cur+1)+" / "+SP.ids.length;
 }
+/* Tapping an answered ticket shows the same thing the finish screen's
+   history does for that one word: what he was asked, the correct answer,
+   what he actually said, and its grade - not just the tile's colour. */
 function spPeek(i){
   if(i<0 || i>=SP.ids.length || !SP.state[i]) return;
-  var c=spCard(SP.ids[i]), el=document.getElementById("spPeek"); if(!el) return;
-  el.innerHTML='<div class="kana sm">'+esc(c.kana)+'</div>'+
-    '<div class="romaji sm">'+esc(c.romaji)+'</div>'+
-    '<div class="conj-gloss">'+esc(c.en)+'</div>';
+  var el=document.getElementById("spPeek"); if(!el) return;
+  el.innerHTML=spHistRow(i);
   el.hidden=false;
   clearTimeout(SP._peekT);
   SP._peekT=setTimeout(function(){ el.hidden=true; }, 4500);
+}
+/* One row of the round's history for word i: the question as shown, the
+   correct answer, his last spoken attempt (or why there wasn't one to
+   grade), and a numeric grade. Shared by the live peek panel above and the
+   finish screen's full list. */
+function spHistRow(i){
+  var id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
+  var verdict = SP.verdict[i] || "none";
+  var q = dir==="j" ? (c.kana+" ("+c.romaji+")") : c.en;
+  var correct = dir==="j" ? c.en : (c.romaji || c.kana);
+  var heardTxt = SP.reason[i]==="skipped" ? "Skipped" :
+    SP.reason[i]==="shown" ? "Shown" :
+    SP.reason[i]==="no-mic" ? "No microphone" :
+    (SP.heard[i] ? SP.heard[i] : "Nothing heard");
+  var pct=SP.grade[i], gradeTxt = pct!=null ? pct+"%" : "—";
+  return '<div class="scres '+historyColor(verdict, SP.tries[i]||0)+'">'+
+    '<div class="scres-q"><span class="lbl">'+(dir==="j"?"Say in English":"Say in Japanese")+'</span><b>'+esc(q)+'</b></div>'+
+    '<div class="scres-a"><span class="lbl">Correct</span><b>'+esc(correct)+'</b></div>'+
+    '<div class="scres-h"><span class="lbl">You said</span><b>'+esc(heardTxt)+'</b></div>'+
+    '<div class="scres-g">'+gradeTxt+'</div>'+
+  '</div>';
 }
 
 /* ---- the stage ---- */
@@ -142,10 +175,6 @@ function spAsk(i){
   SP.cur=i;
   var id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
   var gen=++SP.gen;
-  // the quiet retry on a wrong answer calls spAsk on this same index again,
-  // so the fail count must only reset when the WORD changes, never on
-  // every call, or it can never count past one
-  if(SP._failId!==id){ SP._failId=id; SP._fails=0; }
   spRenderTiles();
   spStageShow(c, dir);
   var lang = dir==="j" ? "en-US" : "ja-JP";
@@ -164,6 +193,7 @@ function spAsk(i){
     if(!recAvailable()){
       // no grading is possible here: show the answer and move on, unscored
       SP.mic="unavailable";
+      SP.verdict[i]="none"; SP.reason[i]="no-mic"; SP.heard[i]=""; SP.grade[i]=null;
       document.getElementById("spState").textContent="No microphone here";
       spShowHeard({heard:dir==="j"?c.en:c.kana, romaji:c.romaji}, null, dir);
       SP.state[i]="skip"; spRenderTiles();
@@ -195,7 +225,11 @@ function spAsk(i){
 /* Grades whatever the continuous mic just heard against whichever word is
    current at the moment the result arrives - one session can span several
    words in the same language block, so "current" has to be read live
-   rather than captured back when that session was opened. */
+   rather than captured back when that session was opened.
+
+   Right advances straight away. Wrong gets up to MAX_TRIES total on the
+   same word, the mic already open. The third wrong attempt reveals the
+   answer and holds for REVEAL_MS before moving on, same as Scenes. */
 function spOnHeard(alts){
   if(SP.cur<0 || SP.cur>=SP.ids.length) return;
   // claim this result the same way sceneOnHeard/sceneMicTap do, so a
@@ -205,23 +239,41 @@ function spOnHeard(alts){
   var i=SP.cur, id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
   var g = dir==="j" ? enGrade(c.en, alts) : spGradeJa(c.kana, alts);
   var pass = dir==="j" ? g.sim>=SP_PASS_EN : g.sim>=SP_PASS_JA;
+  var close = dir==="j" ? g.sim>=SP_CLOSE_EN : g.sim>=SP_CLOSE_JA;
+  var verdict = pass ? "good" : (close ? "close" : "missed");
   spShowHeard(g, pass, dir);
+  SP.mic="ok";
+  SP.heard[i] = dir==="j" ? (g.heard||"") : (g.romaji||"");
+  SP.verdict[i]=verdict; SP.grade[i]=verdictPct(verdict);
+  // the try count is per word, not per call - it must only reset when the
+  // WORD changes, never on every call, or a retry could never count past one
+  if(SP._failId!==id){ SP._failId=id; SP.tries[i]=0; }
+  SP.tries[i]=(SP.tries[i]||0)+1;
   if(pass){
-    SP._fails=0; SP.mic="ok";
     SP.state[i]="good"; spRenderTiles();
     setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, 650);
-  } else {
-    SP.mic="ok";
-    SP._fails=(SP._fails||0)+1;
-    if(SP._fails>=4) document.getElementById("spState").textContent="Still not quite. Say it again, or tap Show answer / Skip.";
-    SP.state[i]="bad"; spRenderTiles();
-    setTimeout(function(){ if(gen===SP.gen) spAsk(i); }, 950);
+    return;
   }
+  if(SP.tries[i]>=MAX_TRIES){
+    SP.state[i]="bad"; spRenderTiles();
+    var reveal = dir==="j" ? c.en : (c.romaji||c.kana);
+    document.getElementById("spHeard").innerHTML =
+      '<span class="scv missed">Answer</span><div class="schrd">'+esc(reveal)+'</div>'+
+      '<div class="schrd">you said <b>'+esc(SP.heard[i]||"nothing clear")+'</b></div>';
+    document.getElementById("spState").textContent="";
+    setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, REVEAL_MS);
+    return;
+  }
+  document.getElementById("spState").textContent="Not quite ("+SP.tries[i]+" of "+MAX_TRIES+"). Say it again, or tap Show answer / Skip.";
+  SP.state[i]="bad"; spRenderTiles();
+  setTimeout(function(){ if(gen===SP.gen) spAsk(i); }, 950);
 }
-/* the tap-to-speak fallback for a phone that will not open the mic on its own */
+/* the tap-to-speak fallback for a phone that will not open the mic on its
+   own - same right-advances / wrong-retries-up-to-MAX_TRIES rule as the
+   continuous path above, just one explicit tap per attempt. */
 function spMicTap(){
   if(SP.cur<0 || SP.cur>=SP.ids.length) return;
-  var gen=++SP.gen, id=SP.ids[SP.cur], c=spCard(id), dir=SP.dir[id];
+  var gen=++SP.gen, i=SP.cur, id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
   document.getElementById("spMicBtn").hidden=true;
   spListening();
   listenOnce(SP_LISTEN_MS, dir==="j" ? "en-US" : "ja-JP", "spState").then(function(r){
@@ -233,9 +285,25 @@ function spMicTap(){
     }
     var g = dir==="j" ? enGrade(c.en, r.alts) : spGradeJa(c.kana, r.alts);
     var pass = dir==="j" ? g.sim>=SP_PASS_EN : g.sim>=SP_PASS_JA;
+    var close = dir==="j" ? g.sim>=SP_CLOSE_EN : g.sim>=SP_CLOSE_JA;
+    var verdict = pass ? "good" : (close ? "close" : "missed");
     spShowHeard(g, pass, dir);
-    if(pass){ SP.state[SP.cur]="good"; spRenderTiles(); setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 650); }
-    else { SP.state[SP.cur]="bad"; spRenderTiles(); document.getElementById("spMicBtn").hidden=false; }
+    SP.heard[i] = dir==="j" ? (g.heard||"") : (g.romaji||"");
+    SP.verdict[i]=verdict; SP.grade[i]=verdictPct(verdict);
+    if(SP._failId!==id){ SP._failId=id; SP.tries[i]=0; }
+    SP.tries[i]=(SP.tries[i]||0)+1;
+    if(pass){ SP.state[i]="good"; spRenderTiles(); setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, 650); return; }
+    if(SP.tries[i]>=MAX_TRIES){
+      SP.state[i]="bad"; spRenderTiles();
+      var reveal = dir==="j" ? c.en : (c.romaji||c.kana);
+      document.getElementById("spHeard").innerHTML =
+        '<span class="scv missed">Answer</span><div class="schrd">'+esc(reveal)+'</div>'+
+        '<div class="schrd">you said <b>'+esc(SP.heard[i]||"nothing clear")+'</b></div>';
+      setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, REVEAL_MS);
+      return;
+    }
+    SP.state[i]="bad"; spRenderTiles();
+    document.getElementById("spMicBtn").hidden=false;
   });
 }
 
@@ -243,9 +311,10 @@ function spMicTap(){
 function spSkipTap(){
   if(SP.cur<0 || SP.cur>=SP.ids.length) return;
   listenCancel();
-  var gen=++SP.gen;
+  var gen=++SP.gen, i=SP.cur;
   document.getElementById("spMicBtn").hidden=true;
   document.getElementById("spHeard").innerHTML='<span class="scv none">Skipped</span>';
+  SP.verdict[i]="none"; SP.reason[i]="skipped"; SP.heard[i]=""; SP.grade[i]=null;
   SP.state[SP.cur]="skip"; spRenderTiles();
   setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 500);
 }
@@ -254,10 +323,11 @@ function spSkipTap(){
 function spShowTap(){
   if(SP.cur<0 || SP.cur>=SP.ids.length) return;
   listenCancel();
-  var gen=++SP.gen, id=SP.ids[SP.cur], c=spCard(id), dir=SP.dir[id];
+  var gen=++SP.gen, i=SP.cur, id=SP.ids[SP.cur], c=spCard(id), dir=SP.dir[id];
   document.getElementById("spMicBtn").hidden=true;
   var shown = dir==="j" ? c.en : c.romaji;
   document.getElementById("spHeard").innerHTML='<span class="scv none">Answer</span><div class="schrd">'+esc(shown||"")+'</div>';
+  SP.verdict[i]="none"; SP.reason[i]="shown"; SP.heard[i]=""; SP.grade[i]=null;
   SP.state[SP.cur]="skip"; spRenderTiles();
   setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 1400);
 }
@@ -268,6 +338,12 @@ function spFinish(){
   document.getElementById("spDoneHead").textContent="Round done";
   document.getElementById("spDoneSub").textContent=
     ok+" of "+SP.ids.length+" said back correctly. Nothing here changed your schedule.";
+  var list=document.getElementById("spDoneList");
+  if(list){
+    var html="";
+    for(var i=0;i<SP.ids.length;i++){ if(SP.state[i]) html+=spHistRow(i); }
+    list.innerHTML=html;
+  }
   done.hidden=false;
   SP.running=false;
 }
@@ -275,6 +351,7 @@ function speakingStart(){
   var ids=speakingWords();
   if(!ids.length){ toast("Nothing met yet. Study a few words first."); return; }
   SP.dir={}; SP.state={}; SP.cur=-1; SP.running=true; SP.mic="untried"; SP._contLang=null;
+  SP.tries={}; SP.heard={}; SP.grade={}; SP.verdict={}; SP.reason={}; SP._failId=null;
   for(var i=0;i<ids.length;i++) SP.dir[ids[i]] = Math.random()<0.5 ? "e" : "j";
   // each word's own direction is still a coin flip, but the order they're
   // asked in is grouped by direction so the mic can stay open across a
