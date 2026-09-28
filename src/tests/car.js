@@ -212,12 +212,12 @@ console.log('\n9. the backup carries car mode, and refuses to go backwards');
 {
 const {ctx,p}=await open(base(items20(),{crep:{c0003:1}}));
 const blob=await p.evaluate(()=>__kl.packAll());
-ok(blob.schema===6,'the backup stamp moved to 6');
+ok(blob.schema===7,'the backup stamp moved to 7');
 ok(blob.crep && blob.crep.c0003===1,'car replays are in the backup');
 ok(blob.carSeen!==undefined,'coverage memory is in the backup');
-ok(await p.evaluate(()=>__kl.validateBlob({schema:7,items:{'c0000|j':[1,0,5,2,9,1,0,0,9,9]}}))!==null,
+ok(await p.evaluate(()=>__kl.validateBlob({schema:8,items:{'c0000|j':[1,0,5,2,9,1,0,0,9,9]}}))!==null,
    'a newer backup is still refused');
-ok(await p.evaluate(()=>__kl.validateBlob({schema:6,items:{'c0000|j':[1,0,5,2,9,1,0,0,9,9]}}))===null,
+ok(await p.evaluate(()=>__kl.validateBlob({schema:7,items:{'c0000|j':[1,0,5,2,9,1,0,0,9,9]}}))===null,
    'and this one is accepted');
 await ctx.close();
 }

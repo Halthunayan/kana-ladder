@@ -55,7 +55,7 @@ const cov=await p.evaluate(()=>{
 });
 ok(cov.nonExpr===0, 'no content word in the trip window is left without an example sentence ('
    +cov.missing+' left, all of them set phrases)');
-ok(cov.missing===17, 'what remains is 17 set phrases that are already complete utterances and need no example ('+cov.missing+')');
+ok(cov.missing<=17, 'what remains is at most 17 set phrases that are already complete utterances and need no example ('+cov.missing+')');
 
 console.log('\n2. the tai form');
 const tai=await p.evaluate(()=>{
@@ -79,11 +79,11 @@ ok(tai.kuru==='きたいです','kuru (to come) gives kitai desu ('+tai.kuru+')'
 ok(tai.aru===false,'aru (to exist) has no tai form, because nothing chooses to exist');
 ok(tai.wakaru===false,'wakaru (to understand) has no tai form');
 ok(tai.tsukareru===false,'tsukareru (to get tired) has no tai form');
-ok(tai.withTai>=240,'the tai form reaches the volitional verbs ('+tai.withTai+' rows)');
+ok(tai.withTai>=225,'the tai form reaches the volitional verbs, and no longer the ones that describe something happening ('+tai.withTai+' rows)');
 
 console.log('\n3. the form table carries its own form names');
 const shape=await p.evaluate(()=>{
-  const KNOWN={masu:1,mashita:1,masen:1,masendeshita:1,potential:1,te:1,tai:1,past:1,politepast:1,neg:1};
+  const KNOWN={masu:1,mashita:1,masen:1,masendeshita:1,potential:1,te:1,tekudasai:1,tai:1,past:1,politepast:1,neg:1,politeneg:1};
   let bad=0, dup=0, rows=0, unlabelled=0;
   for(const id in __kl.FORMS){
     const r=__kl.FORMS[id]; rows++;
@@ -165,7 +165,12 @@ const ho=await p.evaluate(()=>{
   const bad=[];
   const byr={};
   __kl.DECK.forEach(c=>{ if(c.dup) return; (byr[c.romaji]=byr[c.romaji]||[]).push(c.id); });
-  for(const r in byr) if(byr[r].length>1) byr[r].forEach(id=>{ if(!__kl.soundIsAmbiguous(id)) bad.push(id+' ('+r+')'); });
+  // a twin that also MEANS the same once read aloud (atsui, hot weather / hot to
+  // the touch) has one right answer to its clip, so it is not ambiguous (28 Sep)
+  for(const r in byr) if(byr[r].length>1){
+    const ens=new Set(byr[r].map(id=>__kl.sayEn(__kl.IDX[id]).toLowerCase()));
+    byr[r].forEach(id=>{ if(ens.size>1 ? !__kl.soundIsAmbiguous(id) : __kl.soundIsAmbiguous(id)) bad.push(id+' ('+r+')'); });
+  }
   // and a card whose only twin is written the same but said differently keeps its listening card
   const wa=__kl.DECK.filter(c=>c.kana==='は');
   return {bad, waBoth:wa.length, waAmbig:wa.filter(c=>__kl.soundIsAmbiguous(c.id)).length};

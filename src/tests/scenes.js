@@ -63,14 +63,14 @@ console.log('1. every scene is whole, and a scene opens only when its lines do')
       gaps0:k.sceneGaps(k.SCENES[0]).length,
       btn:!!document.getElementById('scenesBtn'), sub:document.getElementById('scenesBtnSub').textContent};
   });
-  ok(d.n===12,'twelve scenes shipped ('+d.n+')');
+  ok(d.n===17,'seventeen scenes shipped, five added for the trip on 28 Sep ('+d.n+')');
   ok(d.lines>=100,'about a hundred lines between them ('+d.lines+')');
   ok(d.whole,'every line is a sentence the deck has');
   ok(d.you,'every scene has lines for him to say');
   ok(d.readyFresh===0,'a fresh state has no scene open ('+d.readyFresh+')');
   ok(d.gaps0>0,'and the first scene names the words it needs ('+d.gaps0+')');
   ok(d.btn,'the Scenes button is on the home screen');
-  ok(/learn a few words first/.test(d.sub),'and says nothing is ready yet ('+d.sub+')');
+  ok(/shadow any scene now/.test(d.sub),'and says nothing is ready to rehearse, but shadowing works now ('+d.sub+')');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();
 }
@@ -139,7 +139,7 @@ console.log('\n3. rehearse: their lines play, his lines are heard, nothing needs
   await p.click('#scenesBtn'); await p.waitForTimeout(300);
   const list=await p.evaluate(()=>({on:document.getElementById('s-scenes').classList.contains('on'),
     items:document.querySelectorAll('#scList .scitem').length, ready:document.querySelectorAll('#scList .scitem:not(.shut)').length}));
-  ok(list.on && list.items===12,'the scene list shows on its own screen');
+  ok(list.on && list.items===17,'the scene list shows on its own screen');
   ok(list.ready===1,'and exactly one scene is marked ready ('+list.ready+')');
   await p.click('#scList .scitem:not(.shut)'); await p.waitForTimeout(200);
   const brief=await p.evaluate(()=>({title:document.getElementById('scTitle').textContent,
@@ -174,12 +174,12 @@ console.log('\n3. rehearse: their lines play, his lines are heard, nothing needs
   ok(JSON.stringify(r.results)==='["good","missed","good"]','graded right, wrong (out of tries), right ('+JSON.stringify(r.results)+')');
   ok(/^67%$/.test(r.head),'the score is shown ('+r.head+')');
   ok(r.saved && Math.abs(r.saved.last-2/3)<0.01 && r.saved.n===1,'and saved for the scene ('+JSON.stringify(r.saved)+')');
-  // their lines (4 of the scene's 7) are shown on screen, not spoken. His
-  // own 3 lines each play once as the model answer - the two retries on
-  // the middle line do not play it again, only the final grade does -
-  // whether that grade is a pass or the reveal after the third miss.
-  ok(r.plays===3,'each of his three lines played once, as the model answer, not once per attempt ('+r.plays+')');
-  ok(/100%/.test(r.list) && /50%/.test(r.list),'the history shows a numeric grade per line, not just a colour ('+r.list.slice(0,200)+')');
+  // their lines (4 of the scene's 7) are now spoken aloud in Rehearse, once
+  // each (28 Sep: understanding the other side by ear is half the exchange).
+  // His own 3 lines each play once as the model answer - the two retries on
+  // the middle line do not play it again, only the final grade does.
+  ok(r.plays===7,'their four lines played once each, and each of his three once as the model answer, not once per attempt ('+r.plays+')');
+  ok(/100%/.test(r.list) && /(^|[^0-9])0%/.test(r.list),'the history shows a numeric grade per line, not just a colour ('+r.list.slice(0,200)+')');
   ok(/You say/.test(r.list) && /Correct/.test(r.list) && /You said/.test(r.list),
     'each row names the question, the correct line and what he actually said');
   // the colour is not the grade's closeness, it's how easily the answer came:

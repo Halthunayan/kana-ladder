@@ -359,7 +359,7 @@ console.log('\n9. three wrong tries in a row reveal the answer, grade it at the 
     heardShown:document.getElementById('spHeard').textContent}));
   ok(mid.tries===3,'exactly three tries were used, not more or fewer ('+mid.tries+')');
   ok(mid.state==='bad','the ticket is marked wrong, not left pending ('+mid.state+')');
-  ok(mid.verdict==='missed' && mid.grade===50,'a completely wrong answer grades at the bottom of the scale ('+mid.verdict+', '+mid.grade+')');
+  ok(mid.verdict==='missed' && mid.grade===0,'a completely wrong answer grades at the bottom of the scale ('+mid.verdict+', '+mid.grade+')');
   ok(/konnichiwa/.test(mid.heardShown),'the correct answer is revealed on screen ('+mid.heardShown+')');
   const tileCls=await p.evaluate(()=>document.querySelector('#spTiles .sptile[data-i="0"]').className);
   ok(/s-bad/.test(tileCls),'never right in three tries shows red, not yellow or green ('+tileCls+')');
@@ -372,7 +372,7 @@ console.log('\n9. three wrong tries in a row reveal the answer, grade it at the 
   await p.click('#spSkipBtn');   // finish the round without needing to know word1's own gloss
   await p.waitForFunction(()=>!document.getElementById('spDone').hidden,null,{timeout:20000});
   const list=await p.evaluate(()=>document.getElementById('spDoneList').textContent);
-  ok(/50%/.test(list),'the finish screen\'s history carries the numeric grade through ('+list.slice(0,160)+')');
+  ok(/(^|[^0-9])0%/.test(list),'the finish screen\'s history carries the numeric grade through ('+list.slice(0,160)+')');
   ok(/konnichiwa/.test(list),'and the correct answer it was graded against');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();

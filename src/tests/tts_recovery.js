@@ -82,9 +82,14 @@ console.log('\n3. when there really is no Japanese voice, it says so');
 const {ctx,p,errs}=await open('never');
 await p.waitForTimeout(1500);
 ok(await p.evaluate(()=>__kl.TTS.ja)===false,'no voice is found, correctly');
-const warn=await p.evaluate(()=>{ const w=document.getElementById('listenWarn');
-  return {hidden:w.hidden, txt:w.textContent}; });
-ok(!warn.hidden,'a warning is shown on the study screen');
+/* With no device voice AND no downloaded library, nothing can speak Japanese:
+   the warning shows and the strip drops listening. With the library loaded,
+   listening works, so the warning must NOT show: announcing that listening
+   was paused while it was running was the bug fixed on 28 Sep. */
+const warn=await p.evaluate(()=>{ const k=__kl, m=k.AUD.man; k.AUD.man=null; k.render();
+  const w=document.getElementById('listenWarn'); const r={hidden:w.hidden, txt:w.textContent,
+  bars:document.querySelectorAll('#skillStrip .sk').length}; k.AUD.man=m; k.render(); return r; });
+ok(!warn.hidden,'with neither a voice nor the library, a warning is shown on the study screen');
 ok(/Listening cards are paused/.test(warn.txt) && /Accessibility/.test(warn.txt),
    'it explains the cause and the fix');
 ok(await p.evaluate(()=>{ const k=__kl; const m=k.AUD.man; k.AUD.man=null;
@@ -92,8 +97,9 @@ ok(await p.evaluate(()=>{ const k=__kl; const m=k.AUD.man; k.AUD.man=null;
    'with nothing able to speak Japanese, listening is off, so two cards per word');
 ok(await p.evaluate(()=>__kl.listenOn())===true,
    'but the pre-rendered library brings it back without a device voice');
-const bars=await p.evaluate(()=>document.querySelectorAll('#skillStrip .sk').length);
-ok(bars===2,'the skill strip drops to two bars');
+ok(warn.bars===2,'the skill strip drops to two bars while nothing can speak');
+const after=await p.evaluate(()=>({hidden:document.getElementById('listenWarn').hidden, bars:document.querySelectorAll('#skillStrip .sk').length}));
+ok(after.hidden && after.bars===3,'and with the library loaded the warning goes and listening is back in the strip');
 ok(errs.length===0,'no errors');
 await ctx.close();
 }

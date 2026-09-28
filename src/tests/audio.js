@@ -168,7 +168,11 @@ await ctx3.close();
 console.log('\n5. the switch turns it off');
 // follow-up cards have their own budget now, so a session can still be running here
 await p.click('#quitBtn').catch(()=>{}); await p.waitForTimeout(300);
+// a session now ends on a summary card; close it before moving on
+await p.click('#sumDone').catch(()=>{}); await p.waitForTimeout(200);
 await p.click('.tab[data-go="set"]'); await p.waitForTimeout(400);
+// settings are grouped and folded; open them the way he would
+await p.evaluate(()=>document.querySelectorAll('#s-set details').forEach(d=>d.open=true));
 await p.click('#setAuto'); await p.waitForTimeout(300);
 ok(await p.evaluate(()=>__kl.S.settings.autoPlay===false),'auto play flips off');
 await p.click('.tab[data-go="home"]'); await p.waitForTimeout(300);

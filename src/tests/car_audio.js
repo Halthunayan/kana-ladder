@@ -161,9 +161,10 @@ const pre=await p.evaluate(()=>{
 ok(pre && pre.mb<=8.01,'the preload before a drive starts is capped by size, not by a count of words ('+pre.n+' sprites, '+pre.mb.toFixed(1)+' MB)');
 /* The button now fetches the whole library rather than a handful of sprites, so
    it needs longer than a couple of seconds before the note can report anything. */
+await p.evaluate(()=>document.querySelectorAll('#s-set details').forEach(d=>d.open=true));
 await p.click('#audGet');
-await p.waitForFunction(()=>/downloaded of/.test(document.getElementById('audNote').textContent),
-                        null,{timeout:60000}).catch(()=>{});
+await p.waitForFunction(()=>/downloaded of/.test(document.getElementById('audNote').textContent) && !document.getElementById('audGet').disabled,
+                        null,{timeout:90000}).catch(()=>{});
 const after=await p.$eval('#audNote',e=>e.textContent);
 ok(/downloaded of/.test(after),'and reports what is now on the device ("'+after.slice(0,50)+'")');
 ok(errs.length===0, errs[0]||'no errors');
