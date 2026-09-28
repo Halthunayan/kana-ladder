@@ -159,6 +159,11 @@ jobs:
       - name: the car voice reaches the audio element
         run: node src/tests/car_audio.js
 
+      # The 28 September round: the sixty council items and the audit fixes
+      # after them, each asserted against the page he loads.
+      - name: the 28 September round and its audit
+        run: node src/tests/round0928.js
+
       # Every other speech suite replaces the engine with a stub, and a stub
       # always accepts a line. This one uses WebKit, which is what Safari runs,
       # and it is the only suite here that exercises a real speech engine.
