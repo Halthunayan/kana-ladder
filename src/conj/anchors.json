@@ -415,15 +415,15 @@
  },
  {
   "id": "g019",
-  "kana": "かって",
-  "romaji": "katte",
-  "en": "buy, te-form",
+  "kana": "かってください",
+  "romaji": "katte kudasai",
+  "en": "buy, please form",
   "base": "かう",
   "baseRomaji": "kau",
   "baseEn": "to buy",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "godan",
   "rule": "godan te-form: verbs ending u, tsu or ru take tte",
   "w": [
@@ -433,20 +433,20 @@
   "tags": [
    "conjugation",
    "godan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g020",
-  "kana": "まって",
-  "romaji": "matte",
-  "en": "wait, te-form",
+  "kana": "まってください",
+  "romaji": "matte kudasai",
+  "en": "wait, please form",
   "base": "まつ",
   "baseRomaji": "matsu",
   "baseEn": "to wait",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "godan",
   "rule": "godan te-form: verbs ending u, tsu or ru take tte",
   "w": [
@@ -456,20 +456,20 @@
   "tags": [
    "conjugation",
    "godan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g021",
-  "kana": "のんで",
-  "romaji": "nonde",
-  "en": "drink, te-form",
+  "kana": "のんでください",
+  "romaji": "nonde kudasai",
+  "en": "drink, please form",
   "base": "のむ",
   "baseRomaji": "nomu",
   "baseEn": "to drink",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "godan",
   "rule": "godan te-form: verbs ending mu, bu or nu take nde",
   "w": [
@@ -479,43 +479,43 @@
   "tags": [
    "conjugation",
    "godan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g022",
-  "kana": "しんで",
-  "romaji": "shinde",
-  "en": "die, te-form",
-  "base": "しぬ",
-  "baseRomaji": "shinu",
-  "baseEn": "to die",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "kana": "よんでください",
+  "romaji": "yonde kudasai",
+  "en": "call, please form",
+  "base": "よぶ",
+  "baseRomaji": "yobu",
+  "baseEn": "to call / invite",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "godan",
   "rule": "godan te-form: verbs ending mu, bu or nu take nde",
   "w": [
-   "c0836"
+   "c0859"
   ],
   "pos": "conjugation",
   "tags": [
    "conjugation",
    "godan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g023",
-  "kana": "きいて",
-  "romaji": "kiite",
-  "en": "hear, te-form",
+  "kana": "きいてください",
+  "romaji": "kiite kudasai",
+  "en": "hear, please form",
   "base": "きく",
   "baseRomaji": "kiku",
   "baseEn": "to hear / listen / ask",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "godan",
   "rule": "godan te-form: verbs ending ku take ite",
   "w": [
@@ -525,20 +525,20 @@
   "tags": [
    "conjugation",
    "godan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g024",
-  "kana": "いって",
-  "romaji": "itte",
-  "en": "go, te-form",
+  "kana": "いってください",
+  "romaji": "itte kudasai",
+  "en": "go, please form",
   "base": "いく",
   "baseRomaji": "iku",
   "baseEn": "to go",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "godan",
   "rule": "the one exception: iku ends in ku but takes tte, not ite",
   "w": [
@@ -548,43 +548,43 @@
   "tags": [
    "conjugation",
    "godan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g025",
-  "kana": "およいで",
-  "romaji": "oyoide",
-  "en": "swim, te-form",
-  "base": "およぐ",
-  "baseRomaji": "oyogu",
-  "baseEn": "to swim",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "kana": "いそいでください",
+  "romaji": "isoide kudasai",
+  "en": "hurry, please form",
+  "base": "いそぐ",
+  "baseRomaji": "isogu",
+  "baseEn": "to hurry",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "godan",
   "rule": "godan te-form: verbs ending gu take ide",
   "w": [
-   "c0828"
+   "c0974"
   ],
   "pos": "conjugation",
   "tags": [
    "conjugation",
    "godan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g026",
-  "kana": "はなして",
-  "romaji": "hanashite",
-  "en": "speak, te-form",
+  "kana": "はなしてください",
+  "romaji": "hanashite kudasai",
+  "en": "speak, please form",
   "base": "はなす",
   "baseRomaji": "hanasu",
   "baseEn": "to speak / talk",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "godan",
   "rule": "godan te-form: verbs ending su take shite",
   "w": [
@@ -594,20 +594,20 @@
   "tags": [
    "conjugation",
    "godan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g027",
-  "kana": "たべて",
-  "romaji": "tabete",
-  "en": "eat, te-form",
+  "kana": "たべてください",
+  "romaji": "tabete kudasai",
+  "en": "eat, please form",
   "base": "たべる",
   "baseRomaji": "taberu",
   "baseEn": "to eat",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "ichidan",
   "rule": "ichidan te-form: drop ru, add te",
   "w": [
@@ -617,20 +617,20 @@
   "tags": [
    "conjugation",
    "ichidan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g028",
-  "kana": "みて",
-  "romaji": "mite",
-  "en": "see, te-form",
+  "kana": "みてください",
+  "romaji": "mite kudasai",
+  "en": "see, please form",
   "base": "みる",
   "baseRomaji": "miru",
   "baseEn": "to see / watch / look at",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "ichidan",
   "rule": "ichidan te-form: drop ru, add te",
   "w": [
@@ -640,20 +640,20 @@
   "tags": [
    "conjugation",
    "ichidan",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g029",
-  "kana": "して",
-  "romaji": "shite",
-  "en": "do, te-form",
+  "kana": "してください",
+  "romaji": "shite kudasai",
+  "en": "do, please form",
   "base": "する",
   "baseRomaji": "suru",
   "baseEn": "to do",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "irregular",
   "rule": "irregular: learn it as it is",
   "w": [
@@ -663,20 +663,20 @@
   "tags": [
    "conjugation",
    "irregular",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g030",
-  "kana": "きて",
-  "romaji": "kite",
-  "en": "come, te-form",
+  "kana": "きてください",
+  "romaji": "kite kudasai",
+  "en": "come, please form",
   "base": "くる",
   "baseRomaji": "kuru",
   "baseEn": "to come",
-  "form": "te",
-  "formEn": "te-form",
-  "use": "joins clauses, and makes requests with kudasai",
+  "form": "tekudasai",
+  "formEn": "please form",
+  "use": "asking someone to do something: the te-form plus kudasai, as in matte kudasai, please wait",
   "cls": "irregular",
   "rule": "irregular: learn it as it is",
   "w": [
@@ -686,22 +686,22 @@
   "tags": [
    "conjugation",
    "irregular",
-   "te"
+   "tekudasai"
   ]
  },
  {
   "id": "g031",
-  "kana": "たかかった",
-  "romaji": "takakatta",
-  "en": "expensive, past",
+  "kana": "たかかったです",
+  "romaji": "takakatta desu",
+  "en": "expensive, polite past",
   "base": "たかい",
   "baseRomaji": "takai",
   "baseEn": "expensive; tall, high",
-  "form": "past",
-  "formEn": "past",
+  "form": "politepast",
+  "formEn": "polite past",
   "use": "describing how something was, or was not",
   "cls": "adj-i",
-  "rule": "i-adjective: drop the final i, add katta",
+  "rule": "i-adjective: drop the final i, add katta desu",
   "w": [
    "c0145"
   ],
@@ -709,22 +709,22 @@
   "tags": [
    "conjugation",
    "adj-i",
-   "past"
+   "politepast"
   ]
  },
  {
   "id": "g032",
-  "kana": "たかくない",
-  "romaji": "takakunai",
-  "en": "expensive, negative",
+  "kana": "たかくないです",
+  "romaji": "takakunai desu",
+  "en": "expensive, polite negative",
   "base": "たかい",
   "baseRomaji": "takai",
   "baseEn": "expensive; tall, high",
-  "form": "neg",
-  "formEn": "negative",
+  "form": "politeneg",
+  "formEn": "polite negative",
   "use": "describing how something was, or was not",
   "cls": "adj-i",
-  "rule": "i-adjective: drop the final i, add kunai",
+  "rule": "i-adjective: drop the final i, add kunai desu",
   "w": [
    "c0145"
   ],
@@ -732,22 +732,22 @@
   "tags": [
    "conjugation",
    "adj-i",
-   "neg"
+   "politeneg"
   ]
  },
  {
   "id": "g033",
-  "kana": "おいしくない",
-  "romaji": "oishikunai",
-  "en": "delicious, negative",
+  "kana": "おいしくないです",
+  "romaji": "oishikunai desu",
+  "en": "delicious, polite negative",
   "base": "おいしい",
   "baseRomaji": "oishii",
   "baseEn": "delicious / tasty",
-  "form": "neg",
-  "formEn": "negative",
+  "form": "politeneg",
+  "formEn": "polite negative",
   "use": "describing how something was, or was not",
   "cls": "adj-i",
-  "rule": "i-adjective: drop the final i, add kunai",
+  "rule": "i-adjective: drop the final i, add kunai desu",
   "w": [
    "c0113"
   ],
@@ -755,19 +755,19 @@
   "tags": [
    "conjugation",
    "adj-i",
-   "neg"
+   "politeneg"
   ]
  },
  {
   "id": "g034",
-  "kana": "よかった",
-  "romaji": "yokatta",
-  "en": "good, past",
+  "kana": "よかったです",
+  "romaji": "yokatta desu",
+  "en": "good, polite past",
   "base": "いい",
   "baseRomaji": "ii",
   "baseEn": "good",
-  "form": "past",
-  "formEn": "past",
+  "form": "politepast",
+  "formEn": "polite past",
   "use": "describing how something was, or was not",
   "cls": "adj-i",
   "rule": "ii is irregular: every form is built on yo-",
@@ -778,19 +778,19 @@
   "tags": [
    "conjugation",
    "adj-i",
-   "past"
+   "politepast"
   ]
  },
  {
   "id": "g035",
-  "kana": "よくない",
-  "romaji": "yokunai",
-  "en": "good, negative",
+  "kana": "よくないです",
+  "romaji": "yokunai desu",
+  "en": "good, polite negative",
   "base": "いい",
   "baseRomaji": "ii",
   "baseEn": "good",
-  "form": "neg",
-  "formEn": "negative",
+  "form": "politeneg",
+  "formEn": "polite negative",
   "use": "describing how something was, or was not",
   "cls": "adj-i",
   "rule": "ii is irregular: every form is built on yo-",
@@ -801,19 +801,19 @@
   "tags": [
    "conjugation",
    "adj-i",
-   "neg"
+   "politeneg"
   ]
  },
  {
   "id": "g036",
   "kana": "しずかでした",
   "romaji": "shizuka deshita",
-  "en": "quiet, past",
+  "en": "quiet, polite past",
   "base": "しずか",
   "baseRomaji": "shizuka",
   "baseEn": "quiet",
-  "form": "past",
-  "formEn": "past",
+  "form": "politepast",
+  "formEn": "polite past",
   "use": "describing how something was, or was not",
   "cls": "adj-na",
   "rule": "na-adjective: add deshita",
@@ -824,22 +824,22 @@
   "tags": [
    "conjugation",
    "adj-na",
-   "past"
+   "politepast"
   ]
  },
  {
   "id": "g037",
-  "kana": "しずかじゃない",
-  "romaji": "shizuka janai",
-  "en": "quiet, negative",
+  "kana": "しずかじゃありません",
+  "romaji": "shizuka ja arimasen",
+  "en": "quiet, polite negative",
   "base": "しずか",
   "baseRomaji": "shizuka",
   "baseEn": "quiet",
-  "form": "neg",
-  "formEn": "negative",
+  "form": "politeneg",
+  "formEn": "polite negative",
   "use": "describing how something was, or was not",
   "cls": "adj-na",
-  "rule": "na-adjective: add janai",
+  "rule": "na-adjective: add ja arimasen",
   "w": [
    "c0206"
   ],
@@ -847,19 +847,19 @@
   "tags": [
    "conjugation",
    "adj-na",
-   "neg"
+   "politeneg"
   ]
  },
  {
   "id": "g038",
   "kana": "べんりでした",
   "romaji": "benri deshita",
-  "en": "convenient, past",
+  "en": "convenient, polite past",
   "base": "べんり",
   "baseRomaji": "benri",
   "baseEn": "convenient",
-  "form": "past",
-  "formEn": "past",
+  "form": "politepast",
+  "formEn": "polite past",
   "use": "describing how something was, or was not",
   "cls": "adj-na",
   "rule": "na-adjective: add deshita",
@@ -870,7 +870,7 @@
   "tags": [
    "conjugation",
    "adj-na",
-   "past"
+   "politepast"
   ]
  },
  {
