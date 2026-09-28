@@ -1,11 +1,11 @@
 var CACHE = "kana-ladder-v45";
 /* The voice files are large and never change in place, so they live in their
-   own cache and survive every deploy. Wiping them with the shell would make a
-   two line change cost a forty megabyte re-download. The name is bumped only
-   when the whole library is re-rendered, as it was for the second voice: every
-   sprite has a new name anyway, so keeping the old bucket would leave fifty
-   four megabytes of audio on the phone that nothing will ever ask for again. */
-var AUDIO_CACHE = "kana-audio-v2";
+   own cache and survive every deploy. This name must be the one the page uses
+   (AUD_CACHE in app.core.js). It was not: the page stored the downloaded voice
+   in kana-audio-v1 while this worker kept only kana-audio-v2, so every deploy
+   deleted the voice the phone had downloaded for offline use. Stale sprites
+   inside the bucket are removed by the page (audPrune), by manifest. */
+var AUDIO_CACHE = "kana-audio-v1";
 var SHELL = ["./","./index.html","./manifest.webmanifest",
   "./icons/apple-touch-icon.png","./icons/icon-192.png","./icons/icon-512.png",
   "./icons/icon-maskable-512.png","./icons/favicon-32.png"];
@@ -16,7 +16,9 @@ self.addEventListener("install", function(e){
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(function(c){
     return Promise.all(SHELL.map(function(u){
-      return c.add(u).catch(function(){ return null; });
+      /* the host lets the old page sit in the HTTP cache for ten minutes, so a
+         plain add could store the previous build under the new name */
+      return c.add(new Request(u,{cache:"reload"})).catch(function(){ return null; });
     })).then(function(){ return c.match("./index.html"); });
   }).catch(function(){}));
 });
