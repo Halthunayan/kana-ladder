@@ -150,7 +150,23 @@
     "who": "you"
    },
    {
-    "sid": "nB059",
+    "sid": "nT020",
+    "who": "them"
+   },
+   {
+    "sid": "nS021",
+    "who": "you"
+   },
+   {
+    "sid": "nT021",
+    "who": "them"
+   },
+   {
+    "sid": "nT022",
+    "who": "you"
+   },
+   {
+    "sid": "nT024",
     "who": "them"
    },
    {
@@ -159,10 +175,6 @@
    },
    {
     "sid": "nB023",
-    "who": "them"
-   },
-   {
-    "sid": "nB030",
     "who": "them"
    },
    {
@@ -515,6 +527,253 @@
    },
    {
     "sid": "nS010",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc13",
+  "title": "Suica and the ticket gate",
+  "en": "The gate will not open, the card needs topping up, and then a change of trains. Station staff at the window by the gates.",
+  "lines": [
+   {
+    "sid": "nA119",
+    "who": "you"
+   },
+   {
+    "sid": "nT001",
+    "who": "them"
+   },
+   {
+    "sid": "nT002",
+    "who": "you"
+   },
+   {
+    "sid": "nT003",
+    "who": "them"
+   },
+   {
+    "sid": "nS001",
+    "who": "you"
+   },
+   {
+    "sid": "nT004",
+    "who": "them"
+   },
+   {
+    "sid": "nP004",
+    "who": "you"
+   },
+   {
+    "sid": "nT005",
+    "who": "them"
+   },
+   {
+    "sid": "nA029",
+    "who": "you"
+   },
+   {
+    "sid": "nB088",
+    "who": "them"
+   },
+   {
+    "sid": "nS010",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc14",
+  "title": "Lost bag at the police box",
+  "en": "A bag left on a train, reported at a police box or the station office. Keep your hotel address to hand.",
+  "lines": [
+   {
+    "sid": "nA092",
+    "who": "you"
+   },
+   {
+    "sid": "nT006",
+    "who": "them"
+   },
+   {
+    "sid": "nT007",
+    "who": "you"
+   },
+   {
+    "sid": "nT008",
+    "who": "them"
+   },
+   {
+    "sid": "nT009",
+    "who": "you"
+   },
+   {
+    "sid": "nT010",
+    "who": "them"
+   },
+   {
+    "sid": "nT011",
+    "who": "you"
+   },
+   {
+    "sid": "nB018",
+    "who": "them"
+   },
+   {
+    "sid": "nT012",
+    "who": "them"
+   },
+   {
+    "sid": "nA123",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc15",
+  "title": "Ordering with dietary needs",
+  "en": "No pork, no alcohol and no mirin, asked politely before the food is made. Mirin is sweet rice wine used in many sauces.",
+  "lines": [
+   {
+    "sid": "nB073",
+    "who": "them"
+   },
+   {
+    "sid": "nA126",
+    "who": "you"
+   },
+   {
+    "sid": "nP003",
+    "who": "you"
+   },
+   {
+    "sid": "nT013",
+    "who": "them"
+   },
+   {
+    "sid": "nA067",
+    "who": "you"
+   },
+   {
+    "sid": "nT014",
+    "who": "them"
+   },
+   {
+    "sid": "nP002",
+    "who": "you"
+   },
+   {
+    "sid": "nT015",
+    "who": "them"
+   },
+   {
+    "sid": "nT016",
+    "who": "you"
+   },
+   {
+    "sid": "nT017",
+    "who": "them"
+   },
+   {
+    "sid": "nT018",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc16",
+  "title": "Convenience store lunch",
+  "en": "A bento at the register: heating it, the point card, chopsticks, a bag, and paying by Suica. The staff questions come fast and in this order.",
+  "lines": [
+   {
+    "sid": "nT019",
+    "who": "you"
+   },
+   {
+    "sid": "nT020",
+    "who": "them"
+   },
+   {
+    "sid": "nS021",
+    "who": "you"
+   },
+   {
+    "sid": "nT021",
+    "who": "them"
+   },
+   {
+    "sid": "nT022",
+    "who": "you"
+   },
+   {
+    "sid": "nB069",
+    "who": "them"
+   },
+   {
+    "sid": "nT023",
+    "who": "you"
+   },
+   {
+    "sid": "nT024",
+    "who": "them"
+   },
+   {
+    "sid": "nA124",
+    "who": "you"
+   },
+   {
+    "sid": "nB030",
+    "who": "them"
+   },
+   {
+    "sid": "nT025",
+    "who": "you"
+   }
+  ]
+ },
+ {
+  "id": "sc17",
+  "title": "Small talk",
+  "en": "A friendly stranger, a taxi driver or hotel staff asking where you are from. Short answers are fine.",
+  "lines": [
+   {
+    "sid": "nT026",
+    "who": "them"
+   },
+   {
+    "sid": "nP005",
+    "who": "you"
+   },
+   {
+    "sid": "nT027",
+    "who": "them"
+   },
+   {
+    "sid": "nT028",
+    "who": "you"
+   },
+   {
+    "sid": "nS004",
+    "who": "them"
+   },
+   {
+    "sid": "nS005",
+    "who": "you"
+   },
+   {
+    "sid": "nT029",
+    "who": "them"
+   },
+   {
+    "sid": "nT030",
+    "who": "you"
+   },
+   {
+    "sid": "nT031",
+    "who": "them"
+   },
+   {
+    "sid": "nT032",
     "who": "you"
    }
   ]
