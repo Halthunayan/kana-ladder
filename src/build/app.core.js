@@ -10,6 +10,10 @@ var SENT = JSON.parse(document.getElementById("sent-data").textContent);
    is out. It is romaji and English only: he does not read Japanese, and putting
    the example on the front would hand him the answer in either direction. */
 var EXAMPLE = JSON.parse(document.getElementById("example-data").textContent);
+/* Particle minimal pairs: two sentences that differ only in the particle.
+   A particle on a flash card with "to / at / in" on the back was his weakest
+   material; the contrast is what teaches it. */
+var PAIRS = (function(){ var el=document.getElementById("pairs-data"); try{ return el ? JSON.parse(el.textContent) : []; }catch(e){ return []; } })();
 var SIDX = {};
 SENT.forEach(function(x){ SIDX[x.id]=x; });
 var IDX = {};
@@ -23,12 +27,17 @@ var HOMO={};
      listening card from wa (topic marker) and ha (tooth), which are written the
      same and sound nothing alike, and from a card whose only twin is a duplicate
      the app never introduces. */
+  /* Two cards that sound the same are only ambiguous by ear when they mean
+     different things: atsui (hot weather) and atsui (hot to the touch) have
+     one answer, "hot", whichever was meant. */
   var byr={};
   for(var i=0;i<DECK.length;i++){
     if(DECK[i].dup) continue;
-    var k=DECK[i].romaji;
-    if(byr[k]!==undefined){ HOMO[DECK[i].id]=1; HOMO[byr[k]]=1; }
-    else byr[k]=DECK[i].id;
+    (byr[DECK[i].romaji]=byr[DECK[i].romaji]||[]).push(DECK[i]);
+  }
+  for(var k in byr){ var g=byr[k]; if(g.length<2) continue;
+    var ens={}; g.forEach(function(c){ ens[(c.sy||cleanEn(c.en)).toLowerCase()]=1; });
+    if(Object.keys(ens).length>1) g.forEach(function(c){ HOMO[c.id]=1; });
   }
 })();
 function soundIsAmbiguous(id){ return !!HOMO[id]; }
@@ -47,11 +56,131 @@ function isConj(c){ return c && c.t==="g"; }
 var CONJ_GATE=3;   // days of interval a word must hold before its forms are drilled
 function isSent(c){ return c && c.t==="s"; }
 
+/* ---------- what is said, and what is shown ----------
+   A gloss is written to be read: "this ~ (before a noun)". Read aloud it came
+   out as "this tilde before a noun", and "hello / good afternoon" as "hello
+   slash good afternoon". The build writes the spoken form into the card as
+   sy wherever it differs, from the same function the audio renderer uses, so
+   the voice and the fallback can never disagree. Anything without one (a
+   sentence, or a card built at runtime) is cleaned here by the same rules. */
+function cleanEn(t){
+  t=String(t||"").replace(/～/g,"~").replace(/\(\s*not\s*\)/g,"not")
+    .replace(/\[[^\]]*\]/g," ").replace(/\([^)]*\)/g," ").replace(/~/g," ").replace(/;/g,",");
+  var segs=t.split(/,(?!\d)/).map(function(s){ return s.trim(); }).filter(Boolean).map(function(s){
+    var p=s.split(/\s*\/\s*/).map(function(x){ return x.trim(); }).filter(Boolean);
+    return p.length>1 ? p.slice(0,-1).join(", ")+" or "+p[p.length-1] : s;
+  });
+  var Q={"polite":1,"said by staff":1,"used by staff":1,"everyday":1,"casual":1,"formal":1,"humble":1,"honorific":1};
+  while(segs.length>1 && Q[segs[segs.length-1].toLowerCase().replace(/[ .]+$/,"")]) segs.pop();
+  return segs.join(", ").replace(/\//g," or ").replace(/\s+/g," ").replace(/\s+([,?.!])/g,"$1").replace(/^[ ,]+|[ ,]+$/g,"");
+}
+function sayEn(c){ if(!c) return ""; return c.sy || cleanEn(c.en); }
+/* On screen the core meaning is what he has to recall; a bracketed note is
+   help, not answer. The core is set large and the note small underneath, so
+   it is plain what passing the card requires. */
+var GLOSS_QUAL={"polite":1,"said by staff":1,"used by staff":1,"everyday":1,"casual":1,"formal":1,"humble":1,"honorific":1};
+function glossParts(en){
+  /* "(not)" is part of the meaning ("(not) at all"): taking it into the note
+     showed zenzen as "totally; at all" and mou as "any more" */
+  var notes=[], core=String(en||"").replace(/\(\s*not\s*\)\s*/g,"not ")
+    .replace(/\(([^)]*)\)|\[([^\]]*)\]/g,function(m,x,y){ notes.push(String(x||y||"").trim()); return " "; })
+    .replace(/\s+/g," ").replace(/\s+([,;?.!])/g,"$1").trim();
+  /* a trailing register word (", polite", "; said by staff") is a note too */
+  var segs=core.split(/\s*[,;]\s*/);
+  while(segs.length>1 && GLOSS_QUAL[segs[segs.length-1].toLowerCase().replace(/[ .]+$/,"")]){
+    notes.unshift(segs.pop());
+    core=core.replace(/\s*[,;]\s*[^,;]*$/,"");
+  }
+  core=core.replace(/[ ,;]+$/,"");
+  return {core:core||String(en||""), note:notes.filter(Boolean).join("; ")};
+}
+function glossHtml(en){
+  var g=glossParts(en);
+  return esc(g.core)+(g.note ? '<span class="gnote">'+esc(g.note)+'</span>' : "");
+}
+/* The part-of-speech chip used to print the Japanese grammatical term alone,
+   which he cannot read. It is in English now, like the tag row under it. */
+function posLabel(c){
+  if(isSent(c)) return "sentence";
+  if(isConj(c)) return "conjugation";
+  return POS_EN[c.pos]||c.pos;
+}
+/* Cards that are only ever asked one way. A staff phrase is something he hears,
+   not something he says; a grammar pattern or a particle on its own has no
+   English prompt that can be answered. Their English to Japanese card is never
+   opened, and one that already exists is held rather than deleted. */
+function noReverse(c){
+  if(!c || isSent(c) || isConj(c)) return false;
+  return !!(c.rec || c.needs || c.pos==="particle");
+}
+/* A pattern card (let's ~, want to ~) is held until a verb it attaches to is
+   solidly known, then shown with that verb slotted in. */
+function patternVerb(c){
+  if(!c || !c.needs) return null;
+  for(var i=0;i<c.needs.length;i++){
+    var it=S.items[c.needs[i]+"|j"];
+    if(it && it.s===1 && it.iv>=CONJ_GATE) return IDX[c.needs[i]]||null;
+  }
+  return null;
+}
+/* must (nakereba narimasen) and can (koto ga dekimasu) are not trip Japanese:
+   polite requests and "may I" cover the same ground, so these two wait until
+   the trip is over even once their verb is known */
+var AFTER_TRIP={c0602:1,c0603:1};
+function patternHeld(c){
+  if(!(c && c.needs)) return false;
+  if(AFTER_TRIP[c.id]){ var d=tripDays(); if(d!==null && d>=0) return true; }
+  return !patternVerb(c);
+}
+function formOf(id, name){
+  var row=FORMS[id]; if(!row) return null;
+  for(var i=0;i+2<row.length;i+=3) if(row[i]===name) return {kana:row[i+1], romaji:row[i+2]};
+  return null;
+}
+function verbGloss(v){ return String(glossParts(v.en).core).split(/[,;\/]/)[0].replace(/^to\s+/,"").trim(); }
+function patternFrame(c){
+  var v=patternVerb(c); if(!v) return null;
+  var ms=formOf(v.id,"masu"), stemK=ms?ms.kana.replace(/ます$/,""):null, stemR=ms?ms.romaji.replace(/masu$/,""):null;
+  var g=verbGloss(v);
+  if(c.id==="c0253" && stemK) return {kana:stemK+"ましょう", romaji:stemR+"mashou", en:"let's "+g};
+  if(c.id==="c0252" && stemK) return {kana:stemK+"ませんか", romaji:stemR+"masen ka", en:"won't you "+g+"?"};
+  if(c.id==="c0254"){ var t=formOf(v.id,"tai"); if(t) return {kana:t.kana, romaji:t.romaji, en:"I want to "+g}; }
+  if(c.id==="c0601"){ var tk=formOf(v.id,"tekudasai");
+    if(tk) return {kana:tk.kana.replace(/ください$/,"")+"もいいですか", romaji:tk.romaji.replace(/\s*kudasai$/,"")+" mo ii desu ka", en:"may I "+g+"?"}; }
+  if(c.id==="c0603") return {kana:v.kana+"ことができます", romaji:v.romaji+" koto ga dekimasu", en:"can "+g};
+  /* no frame is better than a wrong one: a bare verb under "with a verb you
+     know" read as if it were the pattern */
+  return null;
+}
+/* Two cards whose English is the same once the notes are taken off are two
+   right answers to one English prompt. The back names the other one, and a
+   typed answer that matches either is right. */
+var ALSO=null;
+function alsoRight(c){
+  if(!c || isSent(c) || isConj(c)) return [];
+  if(!ALSO){
+    ALSO={}; var by={};
+    for(var i=0;i<DECK.length;i++){ var d=DECK[i]; if(d.dup) continue;
+      var k=sayEn(d).toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+      (by[k]=by[k]||[]).push(d); }
+    for(var k2 in by) if(by[k2].length>1) by[k2].forEach(function(d){ ALSO[d.id]=by[k2].filter(function(x){ return x!==d; }); });
+    /* pairs that share a sense without sharing a gloss, checked by hand: either
+       is right for "a little" or "which one" (a sense match done by machine
+       would also pair iru and aru, which are not interchangeable) */
+    [["c0019","c0030"],["c0284","c0283"],["c0224","c0280"],["c0225","c0281"],["c0226","c0282"],["c0005","c0316"]].forEach(function(pr){
+      var a=IDX[pr[0]], b=IDX[pr[1]]; if(!a || !b) return;
+      (ALSO[a.id]=ALSO[a.id]||[]).indexOf(b)<0 && ALSO[a.id].push(b);
+      (ALSO[b.id]=ALSO[b.id]||[]).indexOf(a)<0 && ALSO[b.id].push(a);
+    });
+  }
+  return ALSO[c.id]||[];
+}
+
 var LEARN = [60, 600], RELEARN = [600], SHARDS = 8, LS_KEY = "kanaladder.v1";
-var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, cardAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto"};
+var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, cardAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto", spAudio:false, remindAt:"19:00"};
 
 var S = {rev:0, items:{}, settings:Object.assign({},DEFAULTS),
-  daily:{key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,noNew:false,buried:{},done:{},missed:{}}, hist:{}, streak:{cur:0,best:0,last:""}, life:{ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{}, checks:[], log:[], scenes:{}, want:[]};
+  daily:{key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,packDone:0,extra:0,carSec:0,prac:0,noNew:false,buried:{},done:{},missed:{}}, hist:{}, streak:{cur:0,best:0,last:""}, life:{ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{}, checks:[], log:[], scenes:{}, want:[], spoken:{}};
 
 /* ---------- time ---------- */
 function dayKey(t){var d=new Date(t-14400000);
@@ -60,7 +189,33 @@ function dayEnd(t){var d=new Date(t-14400000); d.setHours(0,0,0,0);
   return d.getTime()+14400000+86400000;}
 function prevKey(k,n){var p=k.split("-"); var d=new Date(+p[0],+p[1]-1,+p[2]); d.setDate(d.getDate()-n);
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
-function rollDay(){var k=dayKey(Date.now()); if(S.daily.key!==k){S.daily={key:k,newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,noNew:false,buried:{},done:{},missed:{}};}}
+function rollDay(){var k=dayKey(Date.now()); if(S.daily.key!==k){S.daily={key:k,newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,packDone:0,extra:0,carSec:0,prac:0,noNew:false,buried:{},done:{},missed:{}};
+  /* The day turns at 04:00, and clearing the held directions at that moment
+     let a word answered at 03:57 come back the other way round eight minutes
+     later. Anything answered in the last twelve hours keeps its siblings held. */
+  holdRecent(12);}}
+function keyOfLogRow(r){
+  var i=r[1], c=null;
+  if(i>=200000) c=CONJ[i-200000]; else if(i>=100000) c=SENT[i-100000]; else c=DECK[i];
+  if(!c) return null;
+  return c.id+"|"+(r[2]===0?"j":(r[2]===1?"e":"a"));
+}
+function holdRecent(hours){
+  if(S.settings.separate===false || !Array.isArray(S.log)) return;
+  var cut=Date.now()/1000-hours*3600;
+  if(!S.daily.buried) S.daily.buried={};
+  for(var i=S.log.length-1;i>=0;i--){
+    var r=S.log[i]; if(r[0]<cut) break;
+    var k=keyOfLogRow(r); if(!k) continue;
+    var sib=siblingsOf(k);
+    /* carried over the 04:00 turn, a hold lasts twelve hours from the answer,
+       not the whole new day: a word answered at 21:00 used to stay held until
+       20:00 the next evening */
+    var until=Math.round((r[0]+hours*3600)*1000);
+    for(var j=0;j<sib.length;j++){ var cur=S.daily.buried[sib[j]];
+      if(cur!==1 && !(typeof cur==="number" && cur>until)) S.daily.buried[sib[j]]=until; }
+  }
+}
 
 /* ---------- FSRS-6 ----------
    Free Spaced Repetition Scheduler, version 6, with the published default
@@ -170,6 +325,53 @@ function fsrsSchedule(it,g,now,preview){
   o.iv=iv; o.s=1; o.due=now+iv*86400000;
   return o;
 }
+/* The four buttons have to mean four different things. On a third of his
+   cards Good and Easy both said 1d, and on relearning cards Hard said exactly
+   what Again said, so the choice between them was a coin with one face. Hard
+   in learning now sits halfway to the next step, as Anki does it, and a
+   graduating or review answer always rises: Hard below Good below Easy, by at
+   least a day. What the button shows is what the button does. */
+function fsrsOutcomes(it,now){
+  var o=[0,1,2,3].map(function(g){ return fsrsSchedule(it,g,now,true); });
+  if(it.s===0 || it.s===2){
+    var steps=(it.s===0)?LEARN:RELEARN, st=Math.min(it.st||0, steps.length-1);
+    var cur=steps[st], nxt=steps[st+1];
+    var hardSec = nxt ? Math.round((cur+nxt)/2) : Math.round(cur*1.5);
+    if(o[1].s!==1) o[1].due=now+hardSec*1000;
+  }
+  function set(b,iv){ o[b].iv=iv; o[b].due=now+iv*86400000; }
+  function lab(b){ return ivLabel(o[b].due-now); }
+  function lift(a,b){
+    if(o[a].s!==1 || o[b].s!==1) return;
+    if(o[b].iv<=o[a].iv) set(b, o[a].iv+1);
+    /* the buttons must also read differently: "5mo 5mo 5mo" offered three
+       choices that looked the same */
+    var guard=0; while(lab(b)===lab(a) && o[b].iv<730 && guard++<60) set(b, o[b].iv+1);
+  }
+  lift(1,2); lift(2,3);
+  /* at the two-year ceiling Hard, Good and Easy all became 730: the lower ones
+     step down instead, so the order and the labels still hold */
+  for(var b=3;b>=2;b--){
+    var a=b-1; if(o[a].s!==1 || o[b].s!==1) continue;
+    if(o[b].iv>730) set(b,730);
+    var guard2=0;
+    while((o[a].iv>=o[b].iv || lab(a)===lab(b)) && o[a].iv>1 && guard2++<400) set(a, o[a].iv-1);
+  }
+  return o;
+}
+function scheduleGraded(it,g,now,preview){
+  if(S.settings.sched==="sm2") return sm2Schedule(it,g,now,preview);
+  var o=fsrsOutcomes(it,now), x=Object.assign({},o[g]);
+  if(!preview && x.s===1 && x.iv>=4){
+    var lo=(g>1 && o[g-1].s===1) ? o[g-1].iv+1 : 1;
+    var hi=(g<3 && o[g+1].s===1) ? o[g+1].iv-1 : 730;
+    lo=Math.min(lo,730); hi=Math.min(hi,730);
+    if(hi<lo) hi=lo;
+    x.iv=clamp(Math.round(x.iv*(0.95+Math.random()*0.10)), lo, hi);
+    x.due=now+x.iv*86400000;
+  }
+  return x;
+}
 function sm2Schedule(it,g,now,preview){
   var o=Object.assign({},it);
   if(o.s===0){
@@ -206,8 +408,8 @@ function ivLabel(ms){
   if(s<3570) return Math.max(1,Math.round(s/60))+"m";
   if(s<86400) return Math.max(1,Math.round(s/3600))+"h";
   var d=s/86400;
-  if(d<30) return Math.round(d)+"d";
-  if(d<365) return trimz((d/30.44).toFixed(d<90?1:0))+"mo";
+  if(d<100) return Math.round(d)+"d";
+  if(d<365) return trimz((d/30.44).toFixed(1))+"mo";
   return trimz((d/365).toFixed(1))+"y";
 }
 function trimz(x){return String(x).replace(/\.0$/,"");}
@@ -228,14 +430,14 @@ function unpackItem(a){
 /* A backup carries no version, so a file written by a newer build could be
    restored by an older one and lose whatever it did not recognise, silently.
    The stamp lets the importer say so instead. */
-var SCHEMA=6;
+var SCHEMA=7;
 function packAll(){var it={}; for(var k in S.items) it[k]=packItem(S.items[k]);
-  return {schema:SCHEMA,rev:S.rev,settings:S.settings,daily:S.daily,hist:S.hist,streak:S.streak,life:S.life,backup:S.backup,notes:S.notes,susp:S.susp,pfail:S.pfail,crep:S.crep,carSeen:S.carSeen,checks:S.checks,log:S.log,scenes:S.scenes||{},want:S.want||[],items:it};}
+  return {schema:SCHEMA,rev:S.rev,settings:S.settings,daily:S.daily,hist:S.hist,streak:S.streak,life:S.life,backup:S.backup,notes:S.notes,susp:S.susp,pfail:S.pfail,crep:S.crep,carSeen:S.carSeen,checks:S.checks,log:S.log,scenes:S.scenes||{},want:S.want||[],spoken:S.spoken||{},items:it};}
 function applyBlob(b){
   if(!b) return;
   S.rev = b.rev||0;
   S.settings = Object.assign({},DEFAULTS,b.settings||{});
-  S.daily = Object.assign({key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,noNew:false,buried:{},done:{},missed:{}},b.daily||{});
+  S.daily = Object.assign({key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,packDone:0,extra:0,carSec:0,prac:0,noNew:false,buried:{},done:{},missed:{}},b.daily||{});
   if(!S.daily.buried) S.daily.buried={};
   if(!S.daily.done) S.daily.done={};
   if(!S.daily.missed) S.daily.missed={};
@@ -243,7 +445,7 @@ function applyBlob(b){
   S.life = Object.assign({ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0},b.life||{});
   S.backup = Object.assign({last:""},b.backup||{});
   S.notes = b.notes||{}; S.susp = b.susp||{}; S.pfail = b.pfail||{}; S.crep = b.crep||{}; S.carSeen = b.carSeen||{};
-  S.scenes = b.scenes||{}; S.want = Array.isArray(b.want)? b.want : [];
+  S.scenes = b.scenes||{}; S.want = Array.isArray(b.want)? b.want : []; S.spoken = b.spoken||{};
   S.checks = Array.isArray(b.checks)? b.checks : [];
   S.log = Array.isArray(b.log) ? b.log : [];
   S.items = {}; var it=b.items||{};
@@ -255,6 +457,12 @@ function applyBlob(b){
     for(var q=0;q<10;q++){ if(typeof a[q]!=="number" || !isFinite(a[q])) { okNums=false; break; } }
     if(!okNums) continue;
     S.items[k]=unpackItem(a);          // extra trailing fields are ignored, never fatal
+  }
+  /* 28 Sep, once: two sentences opened on wrong word links (sumimasen was taken
+     for sumu, to live) and failed since; they go back to unseen and return when
+     their words are really known */
+  if(typeof b.schema!=="number" || b.schema<7){
+    ["nS025","nS045"].forEach(function(id){ ["j","e","a"].forEach(function(d){ delete S.items[id+"|"+d]; }); });
   }
 }
 // A backup must look like one before it is allowed to replace a schedule.
@@ -308,26 +516,26 @@ function setSync(mode){
 
 /* ---------- level and score ---------- */
 var LEVELS=[
- {min:0,    n:1,  ja:"入門",     en:"Getting started",     d:"The deck is open. The first words you meet carry most of everyday survival Japanese, so early progress is worth more than it looks."},
- {min:18,   n:2,  ja:"挨拶",     en:"Greetings",           d:"Greeting, thanking, apologising and introducing yourself are starting to come without effort."},
- {min:45,   n:3,  ja:"数と時",   en:"Numbers and time",    d:"Counts, prices, days of the week and clock times are becoming yours."},
- {min:90,   n:4,  ja:"毎日",     en:"Everyday things",     d:"Food, family, the home and the objects in it are turning automatic."},
- {min:155,  n:5,  ja:"動詞",     en:"Verbs in play",       d:"Enough verbs and adjectives to say what you do and what things are like."},
- {min:250,  n:6,  ja:"文",       en:"Sentence building",   d:"Particles and set patterns let you assemble sentences of your own rather than repeat fixed ones."},
- {min:375,  n:7,  ja:"会話",     en:"Conversational",      d:"You recognise most of what a slow, simple conversation is made of."},
- {min:520,  n:8,  ja:"定着",     en:"Consolidating",       d:"The core is largely known and intervals are long. Recall in Japanese is catching up to recognition."},
- {min:690,  n:9,  ja:"N5相当",   en:"N5 vocabulary range", d:"Your vocabulary covers the ground JLPT N5 tests. Grammar, kanji and listening are separate battles."},
- {min:860,  n:10, ja:"基礎完成", en:"Foundation complete", d:"The first thousand words are done. From here the deck moves into the vocabulary that carries real conversation."},
- {min:960,  n:11, ja:"拡張",     en:"Widening out",        d:"Past survival Japanese. You are picking up the words that let you say more than the minimum."},
- {min:1060, n:12, ja:"仕事",     en:"Work and study",      d:"Offices, schedules, documents and study language are entering the rotation."},
- {min:1160, n:13, ja:"気持ち",   en:"Feelings and people", d:"Emotions, character and relationships beyond happy and sad."},
- {min:1260, n:14, ja:"表現",     en:"Fuller expression",   d:"Adjectives and adverbs precise enough to say what you actually mean."},
- {min:1360, n:15, ja:"文法",     en:"Grammar in depth",    d:"The patterns that turn sentences into paragraphs: conditionals, causatives, hearsay, intent."},
- {min:1450, n:16, ja:"生活",     en:"Daily life mastered", d:"Renting, banking, travel, shopping and the city hold no vocabulary surprises."},
- {min:1530, n:17, ja:"流暢へ",   en:"Toward fluency",      d:"Most of what an ordinary conversation contains is now familiar in both directions."},
- {min:1600, n:18, ja:"N4相当",   en:"N4 vocabulary range", d:"Your vocabulary covers the ground JLPT N4 tests."},
- {min:1660, n:19, ja:"熟成",     en:"Deep consolidation",  d:"Nearly everything is on long intervals. The deck is maintaining itself."},
- {min:1710, n:20, ja:"完成",     en:"Deck mastered",       d:"Both directions strong across all 1,759 words. Time for native material rather than a deck."}
+ {min:0,    n:1,  ja:"入門", ro:"nyuumon",     en:"Getting started",     d:"The deck is open. The first words you meet carry most of everyday survival Japanese, so early progress is worth more than it looks."},
+ {min:18,   n:2,  ja:"挨拶", ro:"aisatsu",     en:"Greetings",           d:"Greeting, thanking, apologising and introducing yourself are starting to come without effort."},
+ {min:45,   n:3,  ja:"数と時", ro:"kazu to toki",   en:"Numbers and time",    d:"Counts, prices, days of the week and clock times are becoming yours."},
+ {min:90,   n:4,  ja:"毎日", ro:"mainichi",     en:"Everyday things",     d:"Food, family, the home and the objects in it are turning automatic."},
+ {min:155,  n:5,  ja:"動詞", ro:"doushi",     en:"Verbs in play",       d:"Enough verbs and adjectives to say what you do and what things are like."},
+ {min:250,  n:6,  ja:"文", ro:"bun",       en:"Sentence building",   d:"Particles and set patterns let you assemble sentences of your own rather than repeat fixed ones."},
+ {min:375,  n:7,  ja:"会話", ro:"kaiwa",     en:"Conversational",      d:"You recognise most of what a slow, simple conversation is made of."},
+ {min:520,  n:8,  ja:"定着", ro:"teichaku",     en:"Consolidating",       d:"The core is largely known and intervals are long. Recall in Japanese is catching up to recognition."},
+ {min:690,  n:9,  ja:"N5相当", ro:"N5 soutou",   en:"N5 vocabulary range", d:"Your vocabulary covers the ground JLPT N5 tests. Grammar, kanji and listening are separate battles."},
+ {min:860,  n:10, ja:"基礎完成", ro:"kiso kansei", en:"Foundation complete", d:"The first thousand words are done. From here the deck moves into the vocabulary that carries real conversation."},
+ {min:960,  n:11, ja:"拡張", ro:"kakuchou",     en:"Widening out",        d:"Past survival Japanese. You are picking up the words that let you say more than the minimum."},
+ {min:1060, n:12, ja:"仕事", ro:"shigoto",     en:"Work and study",      d:"Offices, schedules, documents and study language are entering the rotation."},
+ {min:1160, n:13, ja:"気持ち", ro:"kimochi",   en:"Feelings and people", d:"Emotions, character and relationships beyond happy and sad."},
+ {min:1260, n:14, ja:"表現", ro:"hyougen",     en:"Fuller expression",   d:"Adjectives and adverbs precise enough to say what you actually mean."},
+ {min:1360, n:15, ja:"文法", ro:"bunpou",     en:"Grammar in depth",    d:"The patterns that turn sentences into paragraphs: conditionals, causatives, hearsay, intent."},
+ {min:1450, n:16, ja:"生活", ro:"seikatsu",     en:"Daily life mastered", d:"Renting, banking, travel, shopping and the city hold no vocabulary surprises."},
+ {min:1530, n:17, ja:"流暢へ", ro:"ryuuchou e",   en:"Toward fluency",      d:"Most of what an ordinary conversation contains is now familiar in both directions."},
+ {min:1600, n:18, ja:"N4相当", ro:"N4 soutou",   en:"N4 vocabulary range", d:"Your vocabulary covers the ground JLPT N4 tests."},
+ {min:1660, n:19, ja:"熟成", ro:"jukusei",     en:"Deep consolidation",  d:"Nearly everything is on long intervals. The deck is maintaining itself."},
+ {min:1710, n:20, ja:"完成", ro:"kansei",     en:"Deck mastered",       d:"Both directions strong across every word in the deck. Time for native material rather than a deck."}
 ];
 var SECTORS=[
  ["Greetings & courtesy",["greetings","courtesy","responses","phrases","intro","classroom"]],
@@ -421,7 +629,7 @@ function scoreParts(){
           known:known, sec:sec, sent:sn, sentTot:snTot, conj:gn, conjTot:gnTot,
           W:W, dims:dims, weakest:weakest};
 }
-/* Over a 1,759 word denominator a whole number percent cannot resolve anything
+/* Over a whole-deck denominator a whole number percent cannot resolve anything
    under about 18 words, so early progress reads as a flat zero. Below ten
    percent the figure carries one decimal. */
 function pct(v){
@@ -435,14 +643,16 @@ function levelOf(score){ var L=LEVELS[0];
 function nextLevel(L){ var i=LEVELS.indexOf(L); return i<LEVELS.length-1?LEVELS[i+1]:null; }
 
 /* ---------- soft daily cap ---------- */
-// The base cap is a floor, not a ceiling: easy first answers buy more new words,
-// a wrong first answer takes some back. It can at most double the base.
+// The base is a floor, not a ceiling. Easy first answers buy more new words, and
+// once the day's reviews are clear he can ask for three more as often as he
+// likes: a soft floor that grows, never a cap, which is what he asked for.
 function newAllowance(){
   if(inTaper()) return 0;
   if(S.daily.noNew) return 0;          // "no new words today" suppresses all fresh intake
   var base=S.settings.newPerDay;
-  if(!S.settings.softCap) return base;
-  return base + clamp(Math.floor(S.daily.credit), 0, base);
+  var extra=Math.max(0, S.daily.extra||0);
+  if(!S.settings.softCap) return base+extra;
+  return base + Math.max(0, Math.floor(S.daily.credit)) + extra;
 }
 /* Recall and listening cards for words already learned used to draw on the new
    word budget, so every fresh word starved the word before it and the queue of
@@ -461,7 +671,7 @@ function consWaiting(){
     var id=DECK[i].id, j=S.items[id+"|j"];
     if(!j) continue;
     var grad=j.s===1;
-    if(mode!=="off" && !S.items[id+"|e"] && !S.susp[id+"|e"] && (mode==="now"||grad)) n++;
+    if(mode!=="off" && !noReverse(DECK[i]) && !S.items[id+"|e"] && !S.susp[id+"|e"] && (mode==="now"||grad)) n++;
     if(ls && !soundIsAmbiguous(id) && !S.items[id+"|a"] && !S.susp[id+"|a"] && grad) n++;
   }
   return n;
@@ -571,7 +781,9 @@ function siblingsOf(key){
 //  buried - the opposite direction of a word answered today (setting: separate).
 function isBuried(key){
   if(S.daily.done && S.daily.done[key]) return true;
-  return S.settings.separate!==false && !!(S.daily.buried&&S.daily.buried[key]);
+  var b=S.daily.buried && S.daily.buried[key];
+  if(!b || S.settings.separate===false) return false;
+  return b===1 || b===true || (typeof b==="number" && b>1 && Date.now()<b);
 }
 
 // A sentence is held back until every word it contains has graduated out of
@@ -595,7 +807,45 @@ function sentGap(){
   if(typeof n!=="number" || !isFinite(n) || n<0) n=DEFAULTS.sentGap;
   return Math.min(1, Math.floor(n));      // one gap at most, by design
 }
-function sentOpen(x){ return x.w.length>0 && sentMissing(x).length<=sentGap(); }
+/* One gap is allowed, but a sentence whose only known words are hai, desu and
+   a particle is not readable, it is a vocabulary test in disguise: iie, tooku
+   nai desu opened on the strength of iie and desu alone, with tooi (far) never
+   taught, and it became his worst card. A sentence now needs at least one of
+   its content words known before it opens. */
+var FUNC_IDS={c0249:1,c0013:1,c0014:1,c0250:1,c0251:1,c0253:1,c0252:1,c0009:1,c0032:1,c0254:1};
+function isFuncWord(id){ var c=IDX[id]; return !c || !!FUNC_IDS[id] || c.pos==="particle"; }
+function sentOpen(x){
+  if(!x.w.length) return false;
+  var miss=sentMissing(x);
+  if(miss.length>sentGap()) return false;
+  var content=0, known=0;
+  for(var i=0;i<x.w.length;i++){ if(isFuncWord(x.w[i])) continue; content++; if(miss.indexOf(x.w[i])<0) known++; }
+  return content===0 || known>0;
+}
+/* the sentences a scene uses, and the one it answers: a reply drilled on its
+   own ("hai, arimasu") means nothing without the question it was said to */
+var SCENE_SID=null, SCENE_ASK=null;
+function sceneMaps(){
+  if(SCENE_SID) return;
+  SCENE_SID={}; SCENE_ASK={};
+  var list=(typeof SCENES!=="undefined")?SCENES:[];
+  for(var i=0;i<list.length;i++){
+    var ls=list[i].lines;
+    for(var j=0;j<ls.length;j++){
+      SCENE_SID[ls[j].sid]=1;
+      /* only a real question or request is shown as what was asked, and only
+         for a line that answers it: "Yes, that is fine." used to be shown as
+         the question behind "Can I use a credit card?" */
+      if(ls[j].who==="you" && j>0 && ls[j-1].who==="them" && !SCENE_ASK[ls[j].sid]){
+        var qa=SIDX[ls[j-1].sid], ya=SIDX[ls[j].sid];
+        var isQ=qa && (/\?\s*$/.test(qa.en) || /(か|ください)[。？?！]?\s*$/.test(qa.kana));
+        if(isQ && ya && !/\?\s*$/.test(ya.en)) SCENE_ASK[ls[j].sid]=ls[j-1].sid;
+      }
+    }
+  }
+}
+function isSceneLine(id){ sceneMaps(); return !!SCENE_SID[id]; }
+function askedBy(id){ sceneMaps(); var a=SCENE_ASK[id]; return a ? SIDX[a] : null; }
 /* When a sentence first becomes readable: the introduction rank of its
    second-latest word, since one word is allowed to still be missing. Built once,
    and only from data that never changes at runtime. */
@@ -620,7 +870,21 @@ function sentQueueOrder(){
   }
 }
 function suspended(key){ return !!S.susp[key]; }
-function usable(key){ return !isBuried(key) && !suspended(key); }
+/* Held: kept, with its history, but not asked for now. A pattern card waits
+   for a verb to hang on; a card that has no honest English prompt is not
+   asked that way; a sentence that keeps failing because of a word he has not
+   met waits for the word. None of these is deleted or reset. */
+function held(key){
+  var p=key.split("|"), c=IDX[p[0]]; if(!c || c.practiceOnly) return false;
+  if(p[1]==="e" && noReverse(c)) return true;
+  if(c.needs && patternHeld(c)) return true;
+  if(isSent(c) && !c.pk){
+    var it=S.items[key];
+    if(it && (p[1]==="a" || it.lapses>=2) && sentMissing(c).length) return true;
+  }
+  return false;
+}
+function usable(key){ return !isBuried(key) && !suspended(key) && !held(key); }
 
 function pools(){
   var now=Date.now(), de=dayEnd(now), lrn=[], rev=[];
@@ -641,7 +905,7 @@ function pools(){
     var id=DECK[i].id, j=S.items[id+"|j"];
     if(!j) continue;
     var grad = j.s===1;
-    if(mode!=="off" && !S.items[id+"|e"] && usable(id+"|e") && (mode==="now"||grad)) cs.push(id+"|e");
+    if(mode!=="off" && !noReverse(DECK[i]) && !S.items[id+"|e"] && usable(id+"|e") && (mode==="now"||grad)) cs.push(id+"|e");
     if(listen && !soundIsAmbiguous(id) && !S.items[id+"|a"] && usable(id+"|a") && grad) cs.push(id+"|a");
   }
   /* Fresh words in introduction order, which is carried in the card's own `ord`
@@ -651,6 +915,7 @@ function pools(){
      numbers do not arrive on the same day. */
   for(var m=0;m<INTRO.length;m++){ var jj=INTRO[m].id+"|j";
     if(INTRO[m].dup) continue;                  // the same word written another way
+    if(INTRO[m].needs && patternHeld(INTRO[m])) continue;   // a pattern waits for its verb
     if(!S.items[jj] && usable(jj)) nw.push(jj); }
   /* A scene he chose to rehearse can ask for its missing words first. They
      keep their place among themselves and everything else keeps the
@@ -664,10 +929,15 @@ function pools(){
     });
   }
   // sentences have their own small budget, and only open once their words are known
+  var pk=[];
   if(S.settings.sentences!==false){
     sentQueueOrder();
     for(var q=0;q<SENT.length;q++){
       var x=SENT[q], sj=x.id+"|j", sa=x.id+"|a";
+      /* The survival phrases are learned whole, like a greeting, before their
+         words: waiting for every word of "please call an ambulance" would put
+         it past the flight. They have their own small daily allowance. */
+      if(!S.items[sj] && x.pk){ if(usable(sj)) pk.push(sj); continue; }
       if(!S.items[sj]){ if(usable(sj) && sentOpen(x)) sn.push(sj); }
       else {
         /* The transactional lines, and only those, are also asked the other way
@@ -678,7 +948,10 @@ function pools(){
         /* Hearing a sentence again is consolidation, not a new sentence, and it
            was taking nearly half of a budget meant for reading new ones. It goes
            on the follow-up allowance, where the word listening cards already are. */
-        if(listen && !S.items[sa] && usable(sa) && S.items[sj].s===1) cs.push(sa);
+        /* Only once every word in it is known and the reading has held three
+           days: a listening card opened the day the reading graduated, on words
+           he had never met, went 1 right in 9. */
+        if(listen && !S.items[sa] && usable(sa) && S.items[sj].s===1 && S.items[sj].iv>=3 && !sentMissing(x).length) cs.push(sa);
       }
     }
     /* The queue used to be whatever order the sentence file happened to be in,
@@ -689,11 +962,18 @@ function pools(){
        order they became readable puts each sentence next to the words it is
        made of, which is also what makes it readable rather than a vocabulary
        test. */
+    /* Among the sentences he can read, the ones the trip needs come first: a
+       scene line, then a line he will have to say, then the rest in the order
+       they became readable. Same daily budget, better spent. */
+    function tv(k){ var id=k.split("|")[0], x=SIDX[id]; if(!x) return 3;
+      return isSceneLine(id) ? 0 : (x.say ? 1 : 2); }
     sn.sort(function(a,b){
+      var ta=tv(a), tb=tv(b); if(ta!==tb) return ta-tb;
       var ra=SENT_RANK[a.split("|")[0]], rb=SENT_RANK[b.split("|")[0]];
       if(ra!==rb) return ra-rb;
       return SENT_AT[a.split("|")[0]]-SENT_AT[b.split("|")[0]];
     });
+    pk.sort(function(a,b){ return (SIDX[a.split("|")[0]].pk||99)-(SIDX[b.split("|")[0]].pk||99); });
   }
   // Conjugation waits for the base word to survive a real gap, not just to leave
   // the learning steps. Drilling tabemasu while taberu is still shaky makes the
@@ -709,20 +989,31 @@ function pools(){
     }
   }
   POOL_CS_N=cs.length;
-  return {lrn:lrn, rev:rev, all:all, nw:nw, cs:cs, sn:sn, cj:cj, now:now, de:de};
+  return {lrn:lrn, rev:rev, all:all, nw:nw, cs:cs, sn:sn, cj:cj, pk:pk, now:now, de:de};
+}
+/* What is left of each daily budget. The last ten days before the trip stop
+   everything new, sentences and conjugation included, not only new words: a
+   card started in the taper cannot mature before the flight, and sentences
+   are where retention is lowest. Follow-ups keep running. */
+var PACK_PER_DAY=2;
+function budgets(){
+  var stop=S.daily.noNew || inTaper();
+  return {
+    newLeft: Math.max(0,newAllowance()-S.daily.newDone),
+    revLeft: Math.max(0,S.settings.revCap-S.daily.revDone),
+    sentLeft: stop?0:Math.max(0,(S.settings.sentPerDay||0)-S.daily.sentDone),
+    conjLeft: stop?0:Math.max(0,(S.settings.conjPerDay||0)-S.daily.conjDone),
+    packLeft: stop?0:Math.max(0,PACK_PER_DAY-(S.daily.packDone||0)),
+    consLeft: Math.max(0,consAllowance()-S.daily.consDone)
+  };
 }
 function counts(){
   var p=pools(); rollDay();
-  var newLeft=Math.max(0,newAllowance()-S.daily.newDone);
-  var revLeft=Math.max(0,S.settings.revCap-S.daily.revDone);
-  var sentLeft=S.daily.noNew?0:Math.max(0,(S.settings.sentPerDay||0)-S.daily.sentDone);
-  var conjLeft=S.daily.noNew?0:Math.max(0,(S.settings.conjPerDay||0)-S.daily.conjDone);
-  var consLeft=Math.max(0,consAllowance()-S.daily.consDone);
-  return {newN:Math.min(newLeft,p.nw.length)+Math.min(consLeft,p.cs.length)+
-               Math.min(sentLeft,p.sn.length)+Math.min(conjLeft,p.cj.length),
-          lrnN:p.lrn.length, dueN:Math.min(revLeft,p.rev.length),
-          aheadN:p.all.length+p.lrn.length+Math.min(newLeft,p.nw.length)+Math.min(consLeft,p.cs.length)+
-                 Math.min(sentLeft,p.sn.length)+Math.min(conjLeft,p.cj.length), p:p};
+  var b=budgets();
+  var fresh=Math.min(b.newLeft,p.nw.length)+Math.min(b.consLeft,p.cs.length)+
+            Math.min(b.sentLeft,p.sn.length)+Math.min(b.conjLeft,p.cj.length)+Math.min(b.packLeft,p.pk.length);
+  return {newN:fresh, lrnN:p.lrn.length, dueN:Math.min(b.revLeft,p.rev.length),
+          aheadN:p.all.length+p.lrn.length+fresh, p:p};
 }
 
 /* ---------- practice: drills that never touch the schedule ---------- */
@@ -733,7 +1024,7 @@ var PRESETS={
 };
 var PRACTICE_CAP=40;
 function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
-function inRotation(k){ return !!S.items[k] && !S.susp[k]; }
+function inRotation(k){ return !!S.items[k] && !S.susp[k] && !held(k); }
 
 /* Practice-only conjugation cards. Built on demand from FORMS for words the
    learner already knows, registered in IDX so the normal card renderer can
@@ -748,7 +1039,8 @@ function inRotation(k){ return !!S.items[k] && !S.susp[k]; }
    number of entries, which is what adding the tai form did. */
 var FORM_LABEL={masu:"polite present", mashita:"polite past", masen:"polite negative",
   masendeshita:"polite past negative", potential:"can do it form", te:"te-form",
-  tai:"want to do it form", past:"plain past", politepast:"polite past", neg:"negative"};
+  tekudasai:"please form", tai:"want to do it form", past:"plain past", politepast:"polite past",
+  neg:"negative", politeneg:"polite negative"};
 function formSet(row){
   var out=[];
   for(var i=0;i+2<row.length;i+=3) out.push([row[i], FORM_LABEL[row[i]]||row[i]]);
@@ -907,6 +1199,12 @@ function weakness(id){
   /* Asking for a word again in the car is the only signal that mode produces.
      It moves nothing in the schedule; it only tells Focus where to look. */
   if(rep){ sc += 1.2*Math.min(rep,3); why.push("replayed in the car"); }
+  /* Speaking and Scenes never write a grade (recognition is too noisy for
+     that), but a word he could not say in three tries is a word to work on. */
+  var spk=S.spoken && S.spoken[id];
+  if(spk && spk.miss && (!spk.okAt || spk.okAt<spk.miss) && Date.now()-spk.miss<7*86400000){
+    sc += 1.5; why.push("missed when said aloud");
+  }
   /* A direction that is failing on its own counts, even when the other two
      carry the average. This is what the first council called the blind spot. */
   if(wd && wd.acc<0.7){
@@ -923,7 +1221,34 @@ function weakness(id){
     why.push("still new, "+Math.round(acc*100)+"% correct");
   }
   if(sc<=0) return null;
-  return {id:id, score:sc, why:why.join(", "), dir:(wd&&wd.acc<0.7)?wd.dir:null};
+  var dd=(wd&&wd.acc<0.7)?wd.dir:null;
+  /* the banner used to print the whole score breakdown, three lines of
+     "difficulty 9.0, reading 50%"; he needs one plain line */
+  var plain = lap ? "missed "+lap+" time"+(lap>1?"s":"")+" lately" : (acc<0.85 ? "shaky lately" : "still new");
+  if(dd) plain += " · "+(dd==="j"?"reading":dd==="e"?"saying it":"hearing it");
+  else if(spk && spk.miss && (!spk.okAt || spk.okAt<spk.miss)) plain += " · saying it";
+  return {id:id, score:sc, why:why.join(", "), plain:plain, dir:dd};
+}
+/* Sentences that keep failing never reached Focus, which only looked at
+   words. A sentence missed twice, or getting under 60 percent lately, is
+   drilled by building it from chunks, which the app can grade. */
+function weakSentences(){
+  var out=[];
+  for(var i=0;i<SENT.length;i++){
+    var x=SENT[i], k=x.id+"|j", it=S.items[k];
+    if(!it || !inRotation(k)) continue;
+    var rows=answerLog(x.id), win=rows.slice(-WEAK_WINDOW), bad=0;
+    for(var r=0;r<win.length;r++) if(win[r][3]<=1) bad++;
+    var lap=(it.lapses||0)+((S.items[x.id+"|e"]||{}).lapses||0)+((S.items[x.id+"|a"]||{}).lapses||0);
+    var acc=win.length? 1-bad/win.length : 1;
+    /* a scene line he could not say in Scenes or Speaking comes to Practice too */
+    var sp=S.spoken&&S.spoken[x.id], spMiss=!!(sp && sp.miss && !(sp.okAt>sp.miss) && Date.now()-sp.miss<7*86400000);
+    if(lap>=2 || (win.length>=3 && acc<0.6) || spMiss)
+      out.push({id:x.id, score:2*lap+3*(1-acc)+(spMiss?1.5:0),
+        plain: spMiss && lap<2 ? "missed when said aloud" : "sentence missed "+lap+" time"+(lap===1?"":"s"), sent:true});
+  }
+  out.sort(function(a,b){ return b.score-a.score; });
+  return out;
 }
 function weakWords(){
   var out=[];
@@ -1015,8 +1340,19 @@ function focusTypes(id){
   if(S.settings.tts!==false && listenOn() && !soundIsAmbiguous(id)) t.push("mcAudio");
   if(FORMS[id]) t.push("conj");
   if(sentenceWith(id)) t.push("cloze");
-  t.push("type");
+  if(pairsFor(id).length) t.push("pair");
+  // a particle or a pattern has no English prompt that can be answered
+  if(noReverse(c)){ t=t.filter(function(x){ return x!=="mcEJ" && x!=="type" && x!=="flipE"; }); }
+  else t.push("type");
   return t;
+}
+function pairsFor(id){
+  var out=[];
+  for(var i=0;i<PAIRS.length;i++){
+    var pp=PAIRS[i]; if(pp.p.indexOf(id)<0) continue;
+    if(SIDX[pp.s[0]] && SIDX[pp.s[1]]) out.push(pp);
+  }
+  return out;
 }
 function makeQuestion(kind, id){
   var c=IDX[id]; if(!c) return null;
@@ -1087,21 +1423,43 @@ function makeQuestion(kind, id){
     return {kind:"cloze", id:id, key:key, opts:opts, sent:sx,
       blank:blank, blankR:blankR, ask:"Which word fills the gap?"};
   }
+  if(kind==="pair"){
+    var ps=pairsFor(id); if(!ps.length) return null;
+    var pp=ps[Math.floor(Math.random()*ps.length)], w=Math.random()<0.5?0:1;
+    var A=SIDX[pp.s[w]], B=SIDX[pp.s[1-w]];
+    opts=shuffle([{text:A.kana, sub:A.romaji, ok:true},{text:B.kana, sub:B.romaji, ok:false}]);
+    return {kind:"pair", id:id, key:key, opts:opts, sent:A, en:A.en, ask:"Which one says this?"};
+  }
+  if(kind==="order"){
+    var sx2=SIDX[id]; if(!sx2) return null;
+    var ot=orderTask(sx2, 3); if(!ot) return null;
+    return {kind:"order", id:id, key:id+"|j", order:ot, ask:"Build it, saying it as you go"};
+  }
   if(kind==="type") return {kind:"type", id:id, key:id+"|e", ask:"Type it in romaji"};
   if(kind==="flipE") return {kind:"flip", id:id, key:id+"|e", dir:"e"};
   return {kind:"flip", id:id, key:key, dir:"j"};
 }
-function focusQueue(){
-  var weak=weakWords();
-  if(!weak.length) return [];
-  var picks=shuffle(weak.slice(0, FOCUS_WORDS)), out=[], rounds=[];
+function focusQueue(force){
+  var weak=weakWords(), seen={}, first=[], rest0=[];
+  /* Words named on the way in (missed this session, replayed in the car) go
+     first. A replayed word that was not already weak used to rank 25th of 25
+     and never came up at all. */
+  (force||[]).forEach(function(id){
+    var c=IDX[id]; if(!c || seen[id] || isConj(c)) return; seen[id]=1;
+    if(isSent(c)) first.push({id:id, sent:true, plain:"missed today", why:"missed today"});
+    else first.push(weakness(id) || {id:id, plain:"asked for again", why:"asked for again", dir:null});
+  });
+  weakSentences().slice(0,3).forEach(function(w){ if(!seen[w.id]){ seen[w.id]=1; rest0.push(w); } });
+  weak.forEach(function(w){ if(!seen[w.id] && rest0.length<FOCUS_WORDS){ seen[w.id]=1; rest0.push(w); } });
+  if(!first.length && !rest0.length) return [];
+  var picks=first.concat(shuffle(rest0)).slice(0, Math.max(FOCUS_WORDS, first.length)), out=[], rounds=[];
   /* A blind shuffle of eight question types gave roughly one weak word in three
      nothing but four-option questions, where the guess floor is 25 percent.
      Every word now gets one recognition question, one that demands production
      from memory, and one free choice, in that order. */
   /* mcEJ is four Japanese options with a 25 percent guess floor, which is
      recognition wearing a production label, so it sits with the others. */
-  var RECOG=["mcJE","mcAudio","cloze","conj","mcEJ"], PRODUCE=["type","flipE"];
+  var RECOG=["mcJE","mcAudio","cloze","conj","mcEJ","pair"], PRODUCE=["type","flipE"];
   // mcEJ is four Japanese options, so it belongs with recognition, not here
   var BYDIR={j:["mcJE","cloze"], e:["type","flipE"], a:["mcAudio"]};
   function makeKind(t){ return (t==="flipE"||t==="flipJ") ? "flip" : t; }
@@ -1111,12 +1469,22 @@ function focusQueue(){
     return null;
   }
   for(var i=0;i<picks.length;i++){
-    var id=picks[i].id, avail=focusTypes(id), made=[];
+    var id=picks[i].id, made=[];
+    if(picks[i].sent){
+      var oq=makeQuestion("order", id) || {kind:"flip", id:id, key:id+"|j", dir:"j"};
+      oq.why=picks[i].why; oq.plain=picks[i].plain;
+      (rounds[0]=rounds[0]||[]).push(oq);
+      continue;
+    }
+    var avail=focusTypes(id);
+    /* a particle is drilled by its minimal pair first: that contrast is the
+       thing a gloss cannot teach */
+    if(avail.indexOf("pair")>=0){ var pq=makeQuestion("pair", id); if(pq) made.push(pq); }
     // the failing direction gets the first slot when the score names one
     var lead=picks[i].dir ? BYDIR[picks[i].dir] : null;
-    var r=lead ? firstOf(lead.filter(function(t){return avail.indexOf(t)>=0;}), id) : null;
-    if(!r) r=firstOf(RECOG.filter(function(t){return avail.indexOf(t)>=0;}), id);
-    if(r) made.push(r);
+    var r=made.length ? made[0] : (lead ? firstOf(lead.filter(function(t){return avail.indexOf(t)>=0;}), id) : null);
+    if(!r){ r=firstOf(RECOG.filter(function(t){return avail.indexOf(t)>=0;}), id); if(r) made.push(r); }
+    else if(!made.length) made.push(r);
     /* when the failing direction is production, the lead list and the produce
        list are the same two types, so the lead is excluded here or the word
        gets the same question twice and no recognition probe at all */
@@ -1130,7 +1498,7 @@ function focusQueue(){
     }
     if(!made.length){ var f=makeQuestion("flipJ",id); if(f) made.push(f); }
     for(var m2=0;m2<made.length;m2++){
-      made[m2].why=picks[i].why;
+      made[m2].why=picks[i].why; made[m2].plain=picks[i].plain;
       (rounds[m2] = rounds[m2] || []).push(made[m2]);
     }
   }
@@ -1153,8 +1521,8 @@ function focusQueue(){
   }
   return FOCUS_OPEN ? out : out.slice(0, FOCUS_CAP);
 }
-function startFocus(){
-  var q=focusQueue();
+function startFocus(force){
+  var q=focusQueue(Array.isArray(force)?force:null);
   /* Regular practice was removed: everything it served, focus serves better.
      So focus must never dead end. With nothing going badly it falls back to a
      mixed draw over everything met, which is what regular practice was. */
@@ -1223,9 +1591,16 @@ function practiceAnswer(ok){
       if(Sess.pMissedKeys.indexOf(k)<0) Sess.pMissedKeys.push(k);
     }
   }
+  /* ten practice answers is a day studied, for the streak */
+  rollDay(); S.daily.prac=(S.daily.prac||0)+1; if(S.daily.prac>=10) markActive(S.daily.key);
   save();
   Sess.done++; Sess.last=k; Sess.qi++;
-  if(Sess.qi>=Sess.queue.length){ endPractice(); return; }
+  if(Sess.qi>=Sess.queue.length){
+    /* practice is never capped: a finished draw is followed by a fresh one */
+    var more=(!Sess.focus && Sess.preset==="all") ? practiceQueue() : [];
+    if(more.length) Sess.queue=Sess.queue.concat(more);
+    else { endPractice(); return; }
+  }
   var nx=Sess.queue[Sess.qi];
   if(Sess.focus){ Sess.q=nx; Sess.key=nx.key; Sess.answered=false; }
   else Sess.key=nx;
@@ -1289,7 +1664,22 @@ function showResetOffer(keys, ok, total){
 
 /* ---------- session ---------- */
 var Sess = {on:false, mode:"today", practice:false, preset:null, queue:null, qi:0,
-  pOk:0, pMiss:0, pMissedKeys:[], key:null, last:null, shown:false, done:0, plan:0, intro:0, typed:false, undo:null};
+  pOk:0, pMiss:0, pMissedKeys:[], key:null, last:null, shown:false, done:0, plan:0, intro:0, typed:false, undo:null,
+  stats:null, cpAt:0};
+/* A session is served in rounds of twenty, about three minutes each, with a
+   place to stop between them. His sessions ran 120 to 160 answers straight,
+   and his Easy rate rose from 35 to 51 percent after the sixtieth answer while
+   Again stayed flat: that is tired grading, not easier cards. */
+/* A round is ten minutes, not a card count: twenty cards took him about two
+   minutes, so the place to stop came far more often than the council meant.
+   ROUND_N is what ten minutes holds at the planning pace, for the badge. */
+var ROUND_SEC=600, CATCHUP=40, SEC_PER_CARD=9, ROUND_N=Math.round(ROUND_SEC/SEC_PER_CARD), ROUND_MIN_CARDS=10;
+/* He asked for no stop prompt (28 Sep): a session runs through every card, as
+   before, and can be left at any card with everything saved. The checkpoint
+   stays in the code, switched off. */
+var CHECKPOINTS=false;
+function roundDue(){ return CHECKPOINTS && Sess.roundT0 && Date.now()-Sess.roundT0>=ROUND_SEC*1000 && Sess.done-(Sess.cpAt||0)>=ROUND_MIN_CARDS; }
+function minutesFor(n){ return Math.max(1, Math.round(n*SEC_PER_CARD/60)); }
 function pickNext(){
   rollDay();
   var p=pools(), now=p.now, ahead=(Sess.mode==="ahead");
@@ -1304,17 +1694,22 @@ function pickNext(){
      new-words-per-day setting of 2. Every budget for fresh material still
      applies here exactly as it does in a normal session. */
   var revPool = ahead ? p.all : p.rev;
-  var newLeft  = Math.max(0,newAllowance()-S.daily.newDone);
-  var revLeft  = ahead ? revPool.length : Math.max(0,S.settings.revCap-S.daily.revDone);
-  var sentLeft = S.daily.noNew?0:Math.max(0,(S.settings.sentPerDay||0)-S.daily.sentDone);
-  var conjLeft = S.daily.noNew?0:Math.max(0,(S.settings.conjPerDay||0)-S.daily.conjDone);
-  var consLeft = Math.max(0,consAllowance()-S.daily.consDone);
+  var b=budgets();
+  var revLeft  = ahead ? revPool.length : b.revLeft;
   var picks=[];
   if(revPool.length && revLeft>0) picks.push(revPool[0]);
-  if(p.nw.length && newLeft>0)    picks.push(p.nw[0]);
-  if(p.cs.length && consLeft>0)   picks.push(p.cs[0]);
-  if(p.sn.length && sentLeft>0)   picks.push(p.sn[0]);
-  if(p.cj.length && conjLeft>0)   picks.push(p.cj[0]);
+  /* After a few missed days the pile is mostly overdue reviews, and serving
+     new material evenly alongside them meant a session stopped early had spent
+     the new-word budget while most of the overdue cards were still waiting.
+     With a real backlog, the first round is reviews only. */
+  var catchUp = !ahead && p.rev.length>CATCHUP && !Sess.rounds && revPool.length && revLeft>0;
+  if(!catchUp){
+    if(p.pk.length && b.packLeft>0)   picks.push(p.pk[0]);
+    if(p.nw.length && b.newLeft>0)    picks.push(p.nw[0]);
+    if(p.cs.length && b.consLeft>0)   picks.push(p.cs[0]);
+    if(p.sn.length && b.sentLeft>0)   picks.push(p.sn[0]);
+    if(p.cj.length && b.conjLeft>0)   picks.push(p.cj[0]);
+  }
   if(picks.length) return picks[Sess.done % picks.length];
   /* Learn ahead only when something is close, and never the card just
      answered. The "|| p.lrn.length===1" that used to sit on this test was the
@@ -1337,6 +1732,7 @@ function buriedCount(){
   var n=0, b=S.daily.buried||{};
   for(var k in b){
     if(S.daily.done && S.daily.done[k]) continue;
+    if(!isBuried(k)) continue;              // a carried hold that has run out
     var p=k.split("|"), c=IDX[p[0]];
     if(!c) continue;
     if(p[1]==="e" && (isSent(c) || isConj(c) || S.settings.reverse==="off")) continue;
@@ -1349,19 +1745,99 @@ function buriedCount(){
 function startSession(mode){
   Sess.on=true; Sess.practice=false; Sess.queue=null; Sess.mode=mode||"today"; Sess.done=0; Sess.undo=null; Sess.last=null;
   Sess.plan = Sess.mode==="ahead" ? 0 : planSize();
+  Sess.stats={ans:0, firstN:0, firstOk:0, seen:{}, newW:[], missed:{}, t0:Date.now()}; Sess.cpAt=0; Sess.rounds=0; Sess.roundT0=Date.now();
   go("review"); document.getElementById("tabs").classList.add("hide");
   nextCard();
 }
 function endSession(msg){
-  Sess.on=false; Sess.practice=false; Sess.queue=null; Sess.undo=null; Sess.last=null;
+  var st=Sess.stats, wasStudy=Sess.on && !Sess.practice;
+  Sess.on=false; Sess.practice=false; Sess.queue=null; Sess.undo=null; Sess.last=null; Sess.stats=null;
   document.getElementById("tabs").classList.remove("hide");
-  go("home"); render(); if(msg) toast(msg);
+  go("home"); render();
+  if(wasStudy && st && st.ans>0) showSessionSummary(st, msg);
+  else if(msg) toast(msg);
 }
 function nextCard(){
   var k=pickNext();
   if(!k){ endSession(sessionEndMsg()); return; }
-  Sess.key=k; Sess.shown=false; Sess.typed=null; Sess.verdict=null; Sess.override=false;
+  /* the checkpoint between rounds: only when there is a next card to go on to */
+  if(!Sess.practice && Sess.done>0 && Sess.cpAt!==Sess.done && roundDue()){
+    Sess.cpAt=Sess.done; Sess.rounds=(Sess.rounds||0)+1; showCheckpoint(); return;
+  }
+  Sess.key=k; Sess.shown=false; Sess.typed=null; Sess.verdict=null; Sess.override=false; Sess.order=null;
   renderCard();
+}
+function cardsLeft(){ var c=counts(); return c.newN+c.dueN+c.lrnN; }
+function confirmQuit(left){
+  var el=document.getElementById("sheet");
+  el.innerHTML='<div class="sheet-in">'+
+    '<h3 class="sheet-title">Stop the session?</h3>'+
+    '<p class="fine">'+left+' card'+(left>1?"s":"")+' left today. Everything answered so far is saved.</p>'+
+    '<div class="sheet-acts">'+
+      '<button class="btn btn-ghost" id="qStay">Keep going</button>'+
+      '<button class="btn" id="qStop">Stop here</button>'+
+    '</div></div>';
+  el.hidden=false; SHEET="quit";
+  document.getElementById("qStay").addEventListener("click",function(){ closeSheet(); });
+  document.getElementById("qStop").addEventListener("click",function(){ closeSheet(); endSession(""); });
+}
+function showCheckpoint(){
+  var st=Sess.stats||{ans:0,firstN:0,firstOk:0}, left=Sess.mode==="ahead" ? 0 : cardsLeft();
+  var el=document.getElementById("sheet");
+  var first = st.firstN ? Math.round(st.firstOk/st.firstN*100)+"% right first time" : "";
+  el.innerHTML='<div class="sheet-in">'+
+    '<h3 class="sheet-title">Round done</h3>'+
+    '<p class="fine">'+st.ans+' answered this session'+(first?", "+first:"")+'. Everything is saved.'+
+      (left ? ' '+left+' card'+(left>1?"s":"")+' left today, about '+minutesFor(left)+' min.' : "")+'</p>'+
+    '<div class="sheet-acts">'+
+      '<button class="btn btn-ghost" id="cpStop">Stop here</button>'+
+      '<button class="btn" id="cpGo">Next round</button>'+
+    '</div></div>';
+  el.hidden=false;
+  document.getElementById("cpStop").addEventListener("click",function(){ closeSheet(); endSession(""); });
+  document.getElementById("cpGo").addEventListener("click",function(){ closeSheet(); Sess.roundT0=Date.now(); nextCard(); });
+}
+/* The session used to end in a toast that was gone in under three seconds.
+   It ends on a card now: what was done, what was new, what was missed and a
+   way to drill those at once, and what tomorrow costs. */
+function tomorrowDue(){
+  var t0=dayEnd(Date.now()), t1=t0+86400000, n=0;
+  /* everything that will be waiting tomorrow, including what was due today and
+     left undone; today's direction holds clear at the day change */
+  for(var k in S.items){ var it=S.items[k]; if(it.due<=t1 && !suspended(k) && !held(k)) n++; }
+  return n;
+}
+function showSessionSummary(st, msg){
+  var el=document.getElementById("sheet");
+  var first = st.firstN ? Math.round(st.firstOk/st.firstN*100) : null;
+  var mins=Math.max(1, Math.round((Date.now()-st.t0)/60000));
+  var newRows=st.newW.slice(0,12).map(function(id){ var c=IDX[id]; if(!c) return "";
+    return '<div class="sumrow"><span class="sr-r">'+esc(c.romaji)+'</span><span class="sr-k">'+esc(c.kana)+'</span><span class="sr-e">'+esc(glossParts(c.en).core)+'</span></div>'; }).join("");
+  var missKeys=Object.keys(st.missed||{}), missRows=missKeys.slice(0,12).map(function(k){ var c=cardOf(k); if(!c) return "";
+    return '<div class="sumrow"><span class="sr-r">'+esc(c.romaji)+'</span><span class="sr-k">'+esc(c.kana)+'</span><span class="sr-e">'+esc(glossParts(c.en).core)+'</span></div>'; }).join("");
+  var tm=tomorrowDue();
+  var bk = backupDays();
+  el.innerHTML='<div class="sheet-in">'+
+    '<div class="sheet-head"><button class="x" id="sheetClose" aria-label="Close">&times;</button></div>'+
+    '<h3 class="sheet-title">'+st.ans+' answered in about '+mins+' min</h3>'+
+    '<p class="fine">'+(first!==null ? first+'% right the first time each card came up. ' : '')+
+      (msg ? esc(msg)+' ' : '')+'Tomorrow: about '+tm+' review'+(tm===1?"":"s")+', roughly '+minutesFor(tm+S.settings.newPerDay*3)+' min.</p>'+
+    (newRows ? '<div class="sheet-sec"><h3>New today</h3>'+newRows+'</div>' : '')+
+    (missRows ? '<div class="sheet-sec"><h3>Missed</h3>'+missRows+'</div>' : '')+
+    (bk===null || bk>=7 ? '<div class="sumwarn">'+(bk===null?'No backup yet.':'Last backup was '+bk+' days ago.')+
+       ' <button class="lk" id="sumBackup">Back up now</button></div>' : '')+
+    '<div class="sheet-acts">'+
+      (missRows ? '<button class="btn btn-ghost" id="sumDrill">Drill the missed ones now</button>' : '')+
+      '<button class="btn" id="sumDone">Done</button>'+
+    '</div></div>';
+  el.hidden=false;
+  if(!el._wired){ el._wired=1; el.addEventListener("click",function(e){ if(e.target===el) closeSheet(); }); }
+  document.getElementById("sheetClose").addEventListener("click",closeSheet);
+  document.getElementById("sumDone").addEventListener("click",closeSheet);
+  var dr=document.getElementById("sumDrill");
+  if(dr) dr.addEventListener("click",function(){ closeSheet(); startFocus(missKeys.map(function(k){ return k.split("|")[0]; })); });
+  var bb=document.getElementById("sumBackup");
+  if(bb) bb.addEventListener("click",function(){ closeSheet(); doBackup(); });
 }
 function sessionEndMsg(){
   var p=pools(), now=Date.now();
@@ -1777,10 +2253,15 @@ var SAY_GEN=0;
    stays on the back of the card as writing, where it teaches that a counter is
    used with a number without putting words in the voice's mouth. */
 function sayTextOf(c){ return c ? c.kana : ""; }
-function speakCard(c, slow){
+function speakCard(c, slow, vary){
   if(!c) return;
   var base=S.settings.speechRate||0.85;
   var rate = slow ? Math.max(0.4, base-0.30) : base;
+  /* "Vary the speed" only ever reached the device voice; with the downloaded
+     library on, every listening card was the same recording at the same speed.
+     A listening card of three morae or more now plays a little faster or
+     slower each time, so the word is learned and not the recording. */
+  if(vary && !slow && S.settings.speechVary!==false && moraCount(sayTextOf(c))>=3) rate=rate*(0.92+Math.random()*0.16);
   var say=sayTextOf(c);
   /* The library reads the card. The phone's own voice used to, and then iOS
      stopped putting it anywhere audible: the engine accepted every line and
@@ -1854,9 +2335,36 @@ function gapHtml(c){
 /* A word on its own is not much use; one sentence showing it in place is. The
    example is a reference to a sentence already in the deck where there is one,
    and a written line where there is not, so the common case costs no bytes. */
+/* The fixed example was often a sentence full of words he had never met: 71
+   of his first 83 examples had at least one. Where the deck has a sentence
+   that uses this word and nothing else he does not know, that one is shown,
+   a line he will need to say first and the shortest after that. */
+/* The example on the back is the sentence he can read best: fewest words he
+   has not met, then a line he will have to say, then the shortest. Only a
+   sentence with no unknown word used to qualify, so the fixed example won
+   even when a line with one unknown word was there (gakusei showed three). */
+function otherMissing(x, id){ var miss=sentMissing(x), n=0; for(var m=0;m<miss.length;m++) if(miss[m]!==id) n++; return n; }
+function readableExample(id){
+  var list=sentencesFor(id), pick=null, best=1e9;
+  for(var i=0;i<list.length;i++){
+    var x=list[i];
+    if(!x.g || typeof x.g[id]!=="number") continue;
+    var other=otherMissing(x, id);
+    var sc=other*100000+(x.say?0:1000)+x.romaji.length;
+    if(sc<best){ best=sc; pick=x; }
+  }
+  if(pick) pick._other=Math.floor(best/100000);
+  return pick;
+}
 function exampleFor(c){
   if(!c || isSent(c) || isConj(c) || c.practiceOnly) return null;
+  var rx=readableExample(c.id);
   var e = EXAMPLE[c.id];
+  var fx = (typeof e==="string") ? SIDX[e] : null;
+  // a hand-written example (not a deck sentence) was chosen to be easy: it
+  // gives way only to a sentence with every other word known
+  var fxOther = fx ? otherMissing(fx, c.id) : (e ? 0.5 : 1e9);
+  if(rx && (rx._other===0 || !e || rx._other<fxOther)) return {romaji:rx.romaji, en:rx.en, key:"sj:"+rx.id};
   if(!e) return null;
   if(typeof e === "string"){
     var x = SIDX[e];
@@ -1892,8 +2400,11 @@ function noteHtml(c){
   var n=S.notes[c.id];
   return n ? '<div class="cardnote">'+esc(n)+'</div>' : "";
 }
+/* Eight lapses was never reached: his worst cards stood at six and seven and
+   the prompt had not appeared once in 1,400 answers. */
 function leechHtml(it,k){
-  if(!it || it.lapses<8) return "";
+  var lc=k?cardOf(k):null, bar=(lc && isSent(lc)) ? 3 : 4;
+  if(!it || it.lapses<bar) return "";
   return '<div class="leech">Failed '+it.lapses+' times. '+
     '<button class="lk" data-act="note">Add a hint</button> · '+
     '<button class="lk" data-act="susp">Set aside</button></div>';
@@ -1915,15 +2426,16 @@ function renderFocusCard(){
   (function(){ var mb=document.querySelector(".missbox"); if(mb) mb.remove(); })();
   var chip=document.getElementById("dirChip");
   var chipTxt={mcJE:"Japanese &rarr; English", mcEJ:"English &rarr; Japanese",
-    mcAudio:"Listening", conj:"Conjugation", cloze:"In a sentence", type:"Type it"};
+    mcAudio:"Listening", conj:"Conjugation", cloze:"In a sentence", type:"Type it",
+    pair:"Which particle", order:"Build the sentence"};
   chip.className="chip "+(q.kind==="mcAudio"?"dir-a":(q.kind==="mcEJ"||q.kind==="type"?"dir-e":"dir-j"));
   chip.innerHTML=chipTxt[q.kind]||"Japanese &rarr; English";
-  document.getElementById("posChip").textContent="重点";
-  document.getElementById("revCount").textContent="focus · "+(Sess.qi+1)+"/"+Sess.queue.length;
+  document.getElementById("posChip").textContent=posLabel(c);
+  document.getElementById("revCount").textContent="practice · "+(Sess.qi+1)+"/"+Sess.queue.length;
   document.getElementById("undoBtn").hidden=true;
   document.getElementById("pracBanner").hidden=false;
   document.getElementById("pracLabel").textContent =
-    "Focus · "+esc(q.why||"one to work on")+" · nothing here changes your schedule";
+    "Practice · "+(q.plain||"one to work on")+" · your schedule is not changed";
   renderPips();
 
   var head="";
@@ -1933,7 +2445,11 @@ function renderFocusCard(){
   } else if(q.kind==="mcJE"){
     head=jpBlockHtml(c);
   } else if(q.kind==="mcEJ" || q.kind==="type"){
-    head='<div class="english">'+esc(c.en)+'</div>';
+    head='<div class="english">'+glossHtml(c.en)+'</div>';
+  } else if(q.kind==="pair"){
+    head='<div class="english sent">'+esc(q.en)+'</div>';
+  } else if(q.kind==="order"){
+    head=askedHtml(c,"say")+'<div class="english sent">'+esc(c.en)+'</div>';
   } else if(q.kind==="conj"){
     head='<div class="conj-base"><div class="kana sm">'+esc(c.kana)+'</div>'+
          '<div class="romaji sm">'+esc(c.romaji)+'</div>'+
@@ -1946,7 +2462,7 @@ function renderFocusCard(){
     ? '<div class="typebox"><input id="typeIn" type="text" inputmode="latin" autocomplete="off" '+
       'autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="romaji"></div>'+
       '<button class="btn" id="typeGo">Check</button><div class="verdict" id="verdict"></div>'
-    : optionsHtml(q.opts);
+    : (q.kind==="order" ? orderHtml(q.order) : optionsHtml(q.opts));
   front.innerHTML = head + '<div class="hint">'+esc(q.ask||"")+'</div>' + body;
   back.innerHTML = "";
   document.getElementById("grades").innerHTML="";
@@ -1959,7 +2475,10 @@ function renderFocusCard(){
   var showsJa = q.kind==="mcJE";     // the only focus kind that shows the Japanese
   if(S.settings.tts!==false && (q.kind==="mcAudio" || (showsJa && S.settings.autoPlay!==false)))
     speakCard(c);
-  if(q.kind==="type"){
+  if(q.kind==="order"){
+    q.order.got=[];
+    wireOrder(q.order, function(ok){ if(Sess.answered) return; Sess.answered=true; showAfter(ok); });
+  } else if(q.kind==="type"){
     var ti=document.getElementById("typeIn");
     document.getElementById("typeGo").addEventListener("click",checkTyped);
     ti.addEventListener("keydown",function(e){ if(e.key==="Enter"){e.preventDefault(); checkTyped();} });
@@ -1973,7 +2492,7 @@ function renderFocusCard(){
 function checkTyped(){
   if(Sess.answered) return;
   var q=Sess.q, c=IDX[q.id], ti=document.getElementById("typeIn");
-  var good = romajiMatches(ti.value, c.romaji);
+  var good = answerMatches(ti.value, c);
   Sess.answered=true; ti.blur();
   var v=document.getElementById("verdict");
   v.className="verdict "+(good?"ok":"no");
@@ -1997,7 +2516,7 @@ function showAfter(good){
   var g=document.getElementById("grades");
   var heardAlready = q.kind==="mcAudio" ||
     (q.kind==="mcJE" && S.settings.autoPlay!==false);
-  if(good && S.settings.tts!==false && !heardAlready) speakCard(c);
+  if(good && S.settings.tts!==false && !heardAlready) speakCard(q.kind==="pair" && q.sent ? q.sent : c);
   if(good){
     g.innerHTML='<button class="btn" id="nextBtn">Next</button>';
     document.getElementById("nextBtn").addEventListener("click",function(){ practiceAnswer(true); });
@@ -2008,14 +2527,14 @@ function showAfter(good){
        hand over the answer, so this is the only place he gets to find out what
        he was reading. */
     var extra='';
-    if(q.kind==="cloze" && q.sent){
+    if((q.kind==="cloze" || q.kind==="pair") && q.sent){
       extra='<div class="focus-ans"><div class="kana sm">'+esc(q.sent.kana)+'</div>'+
             '<div class="romaji sm">'+esc(q.sent.romaji)+'</div>'+
             '<div class="conj-gloss">'+esc(q.sent.en)+'</div></div>';
     }
-    g.innerHTML='<div class="focus-ans"><div class="kana sm">'+esc(c.kana)+'</div>'+
+    g.innerHTML=(q.kind==="pair" ? "" : '<div class="focus-ans"><div class="kana sm">'+esc(c.kana)+'</div>'+
       '<div class="romaji sm">'+esc(c.romaji)+'</div>'+
-      '<div class="conj-gloss">'+esc(c.en)+'</div></div>'+ extra +
+      '<div class="conj-gloss">'+glossHtml(c.en)+'</div></div>')+ extra +
       '<button class="btn" id="nextBtn">Next</button>';
     document.getElementById("nextBtn").addEventListener("click",function(){ practiceAnswer(false); });
   }
@@ -2031,24 +2550,35 @@ function renderCard(){
   var chip=document.getElementById("dirChip");
   chip.className="chip "+(d==="a"?"dir-a":(d==="j"?"dir-j":"dir-e"));
   chip.innerHTML = d==="a" ? "Listening" : (d==="j" ? "Japanese &rarr; English" : "English &rarr; Japanese");
-  document.getElementById("posChip").textContent = isSent(c) ? "文" : (isConj(c) ? "活用" : (POS_JA[c.pos]||c.pos));
+  document.getElementById("posChip").textContent = posLabel(c);
+  /* "0/112" on the first card, and a total that grew as missed cards came
+     back, measured the wrong thing. What is left, counted fresh, is what a
+     person deciding whether to stop actually wants to know. */
   document.getElementById("revCount").textContent = Sess.practice
-    ? (Sess.focus?"focus · ":"practice · ")+(Sess.qi+1)+"/"+Sess.queue.length
-    : (Sess.mode==="ahead" ? "ahead · "+Sess.done : Sess.done+"/"+Math.max(Sess.plan,Sess.done+1));
+    ? "practice · "+(Sess.qi+1)+"/"+Sess.queue.length
+    : (Sess.mode==="ahead" ? "ahead · "+Sess.done : cardsLeft()+" left");
   document.getElementById("undoBtn").hidden = !Sess.undo || Sess.practice;
   document.getElementById("pracBanner").hidden = !Sess.practice;
   if(Sess.practice) document.getElementById("pracLabel").textContent =
     (Sess.focus && Sess.q)
-      ? "Focus · "+(Sess.q.why||"one to work on")+" · nothing here changes your schedule"
-      : "Practice · nothing you answer here changes your schedule";
+      ? "Practice · "+(Sess.q.plain||"one to work on")+" · your schedule is not changed"
+      : "Practice · your schedule is not changed";
   renderPips();
 
+  var engl = function(){ return '<div class="english'+(isSent(c)?" sent":"")+'">'+glossHtml(c.en)+'</div>'; };
   if(d==="a"){
     front.innerHTML = '<button class="playbig" data-speak="1" aria-label="Play the audio">'+SPK+'</button>'+
       '<div class="hint">What did you hear?<br><span class="sub2">tap to play again</span></div>'+
       '<button class="slowbtn" data-slow="1">Play it slower</button>';
-    back.innerHTML = jpBlockHtml(c) +
-      '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + sayHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    /* A sentence heard is two questions: did the sounds land, and is the
+       meaning known. The romaji comes first with a slow replay beside it; the
+       meaning is one more tap. */
+    back.innerHTML = jpBlockHtml(c) + (isSent(c)
+        ? '<button class="slowbtn" data-slow="1">Play it slower</button>'+
+          '<div class="meanbox"><button class="btn btn-ghost" id="meanBtn">Show the meaning</button>'+
+          '<div id="meanTxt" hidden>'+engl()+'</div></div>'
+        : engl()) +
+      askedHtml(c,"back") + gapHtml(c) + sayHtml(c) + frameHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else if(isConj(c)){
     var ruleHtml = c.rule ? '<div class="conj-rule">'+esc(c.rule)+'</div>' : "";
     front.innerHTML =
@@ -2059,15 +2589,24 @@ function renderCard(){
     back.innerHTML = jpBlockHtml(c) + ruleHtml +
       '<div class="conj-use">'+esc(c.use)+'</div>'+ noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else if(d==="j"){
-    front.innerHTML = jpBlockHtml(c) +
+    /* The one word a sentence may still be missing is glossed on the FRONT
+       now: it used to appear only after the flip, so the sentence could not be
+       read at the moment it was being asked. */
+    front.innerHTML = askedHtml(c,"front") + jpBlockHtml(c) + (isSent(c) ? gapHtml(c) : "") +
       '<div class="hint">'+(Sess.focus?"From memory: what does this mean?":"What does this mean?")+'</div>';
-    back.innerHTML = '<div class="english'+(isSent(c)?" sent":"")+'">'+esc(c.en)+'</div>'+ gapHtml(c) + sayHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    back.innerHTML = engl() + sayHtml(c) + frameHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else {
-    front.innerHTML = '<div class="english">'+esc(c.en)+'</div>'+
-      '<div class="hint">Say it in Japanese</div>'+
-      (S.settings.typing ? '<div class="typebox"><input id="typeIn" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="romaji"></div><div class="verdict" id="verdict"></div>' : "");
-    back.innerHTML = jpBlockHtml(c) + sayHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    var ord = isSent(c) ? orderTask(c) : null;
+    Sess.order = ord;
+    front.innerHTML = askedHtml(c,"say") + '<div class="english">'+glossHtml(c.en)+'</div>'+
+      '<div class="hint">'+(ord ? "Put it in order, saying it as you go" : "Say it in Japanese")+'</div>'+
+      (ord ? orderHtml(ord) :
+       (S.settings.typing ? '<div class="typebox"><input id="typeIn" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="romaji"></div><div class="verdict" id="verdict"></div>' : ""));
+    back.innerHTML = jpBlockHtml(c) + alsoHtml(c) + sayHtml(c) + frameHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    if(ord) wireOrder(ord, function(ok){ Sess.typed=ok; Sess.verdict=ok?1:0; reveal(); });
   }
+  var mb=document.getElementById("meanBtn");
+  if(mb) mb.addEventListener("click",function(e){ e.stopPropagation(); mb.hidden=true; document.getElementById("meanTxt").hidden=false; });
   wireSpeak(c);
   wireLeech(c,k);
   var ti=document.getElementById("typeIn");
@@ -2078,10 +2617,83 @@ function renderCard(){
      timer, because WebKit only allows speech inside the user gesture that
      started it. A conjugation card plays its dictionary form, never the answer. */
   if(S.settings.tts && S.settings.autoPlay!==false){
-    if(d==="a") speakCard(c);
+    if(d==="a") speakCard(c, false, true);
     else if(isConj(c)) speakBase(c);
     else if(d==="j") speakCard(c);
   }
+}
+/* the question a scene reply answers, shown with it */
+function askedHtml(c, where){
+  if(!isSent(c)) return "";
+  var q=askedBy(c.id); if(!q) return "";
+  // on a card where he has to produce the reply, the question's romaji would
+  // hand him its words, so only its English is shown there
+  var body = where==="say" ? esc(q.en)
+    : '<span class="ask-r">'+esc(q.romaji)+'</span> <span class="ask-e">'+esc(q.en)+'</span>';
+  return '<div class="askbox"><span class="ask-l">'+(where==="say"?"They asked":"Asked")+'</span>'+body+'</div>';
+}
+/* a pattern card, shown working with a verb he already knows */
+function frameHtml(c){
+  if(!c || !c.needs) return "";
+  var f=patternFrame(c); if(!f) return "";
+  return '<div class="framebox"><span class="fr-l">with a verb you know</span>'+
+    '<span class="fr-r">'+esc(f.romaji)+'</span><span class="fr-k">'+esc(f.kana)+'</span><span class="fr-e">'+esc(f.en)+'</span></div>';
+}
+function alsoHtml(c){
+  var a=alsoRight(c); if(!a.length) return "";
+  return '<div class="alsobox"><span class="al-l">also right</span>'+a.slice(0,2).map(function(d){
+    return '<span class="al-r">'+esc(d.romaji)+'</span> <span class="al-e">'+esc(d.en)+'</span>'; }).join("<br>")+'</div>';
+}
+/* Saying a long sentence from English, graded by his own say-so, does not
+   scale past the first few: 81 of the lines he has to say are six words or
+   longer. Those are built from shuffled chunks instead, which the app can
+   grade itself, and he says it aloud while he builds it. */
+var SMALL={wa:1,ga:1,o:1,ni:1,de:1,e:1,to:1,mo:1,no:1,ka:1,yo:1,ne:1,made:1,kara:1};
+function orderChunks(x, min){
+  var toks=String(x.romaji).replace(/[.,!?]/g," ").split(/\s+/).filter(Boolean);
+  if(toks.length<(min||6)) return null;
+  var ch=[];
+  for(var i=0;i<toks.length;i++){
+    if(ch.length && SMALL[toks[i]]) ch[ch.length-1]+=" "+toks[i];
+    else ch.push(toks[i]);
+  }
+  while(ch.length>5){
+    var best=0, bl=1e9;
+    for(var j=0;j<ch.length-1;j++){ var l=ch[j].length+ch[j+1].length; if(l<bl){ bl=l; best=j; } }
+    ch.splice(best,2,ch[best]+" "+ch[best+1]);
+  }
+  return ch.length>=3 ? ch : null;
+}
+function orderTask(x, min){
+  var ch=orderChunks(x, min); if(!ch) return null;
+  var sh=ch.map(function(t,i){ return {t:t,i:i}; });
+  for(var n=0;n<8;n++){ shuffle(sh); if(sh.some(function(o,j){ return o.i!==j; })) break; }
+  return {want:ch, opts:sh, got:[]};
+}
+function orderHtml(o){
+  return '<div class="ordline" id="ordLine"></div><div class="ordopts" id="ordOpts">'+
+    o.opts.map(function(x,j){ return '<button class="ordchip" data-j="'+j+'">'+esc(x.t)+'</button>'; }).join("")+
+    '</div><button class="lk" id="ordReset">start again</button>';
+}
+function wireOrder(o, done){
+  var line=document.getElementById("ordLine"), host=document.getElementById("ordOpts");
+  function paint(){ line.textContent = o.got.map(function(j){ return o.opts[j].t; }).join(" ") || "\u00a0"; }
+  paint();
+  Array.prototype.forEach.call(host.querySelectorAll(".ordchip"),function(b){
+    b.addEventListener("click",function(e){
+      e.stopPropagation();
+      var j=+b.dataset.j; if(o.got.indexOf(j)>=0) return;
+      o.got.push(j); b.disabled=true; paint();
+      if(o.got.length===o.opts.length){
+        var ok=o.got.every(function(jj,pos){ return o.opts[jj].t===o.want[pos]; });
+        line.className="ordline "+(ok?"ok":"no");
+        setTimeout(function(){ done(ok); }, 350);
+      }
+    });
+  });
+  var r=document.getElementById("ordReset");
+  if(r) r.addEventListener("click",function(e){ e.stopPropagation(); o.got=[]; line.className="ordline";
+    Array.prototype.forEach.call(host.querySelectorAll(".ordchip"),function(b){ b.disabled=false; }); paint(); });
 }
 function wireLeech(c,k){
   Array.prototype.forEach.call(document.querySelectorAll(".leech .lk"),function(b){
@@ -2133,7 +2745,8 @@ function wireSpeak(c){
 }
 function renderPips(){
   var el=document.getElementById("pips"), n=12, h="";
-  var filled = Sess.mode==="ahead" ? (Sess.done%(n+1)) : (Sess.plan?Math.round(Sess.done/Math.max(Sess.plan,1)*n):0);
+  var filled = Sess.practice ? Math.round((Sess.qi)/Math.max(1,(Sess.queue||[]).length)*n)
+             : (Sess.mode==="ahead" ? Math.round((Sess.done%20)/20*n) : Math.round(Sess.done/Math.max(1,Sess.done+cardsLeft())*n));
   for(var i=0;i<n;i++) h+='<i class="'+(i<filled?(Sess.mode==="ahead"?"b":"a"):"")+'"></i>';
   el.innerHTML=h;
 }
@@ -2279,6 +2892,13 @@ function answerKeys(romaji){
   return keys;
 }
 
+/* a card with a twin that means the same thing accepts either */
+function answerMatches(typed, c){
+  if(romajiMatches(typed, c.romaji)) return true;
+  var a=alsoRight(c);
+  for(var i=0;i<a.length;i++) if(romajiMatches(typed, a[i].romaji)) return true;
+  return false;
+}
 /* the check itself */
 function romajiMatches(typed, romaji){
   var t=moraKey(typed);
@@ -2295,9 +2915,11 @@ function reveal(){
   // the card must not repaint the grade row over the answer feedback
   if(Sess.focus && Sess.q && Sess.q.kind!=="flip") return;
   var c=cardOf(Sess.key), d=dirOf(Sess.key);
+  /* the back carries its own slow replay; two of them stacked was one too many */
+  var fs=document.querySelector("#faceFront .slowbtn"); if(fs && d==="a" && isSent(c)) fs.hidden=true;
   if(d==="e" && S.settings.typing){
     var ti=document.getElementById("typeIn"), v=document.getElementById("verdict");
-    if(ti && v){ var ok=romajiMatches(ti.value, c.romaji);
+    if(ti && v){ var ok=answerMatches(ti.value, c);
       v.textContent = ti.value ? (ok?"correct":"you typed "+ti.value) : "";
       v.className="verdict "+(ok?"ok":"no");
       Sess.typed = ti.value ? ok : null;
@@ -2335,9 +2957,10 @@ function renderGrades(shown){
   var lo=0, hi=3;
   if(Sess.typed===false){ hi=0; }
   else if(Sess.typed===true){ lo=1; }
+  var outs = S.settings.sched==="sm2" ? [0,1,2,3].map(function(g){ return sm2Schedule(it,g,now,true); }) : fsrsOutcomes(it,now);
   for(var i=0;i<4;i++){
     if(i<lo || i>hi) continue;
-    var nx=schedule(it,i,now,true);
+    var nx=outs[i];
     h+='<button class="grade g'+i+'" data-g="'+i+'"><span class="iv">'+ivLabel(nx.due-now)+'</span><span class="lb">'+labels[i]+'</span></button>';
   }
   if(Sess.typed===true||Sess.typed===false)
@@ -2361,6 +2984,15 @@ function snapshot(k){
     life: JSON.parse(JSON.stringify(S.life)),
     streak: JSON.parse(JSON.stringify(S.streak)),
     histKey: S.daily.key, histVal: S.hist[S.daily.key],
+    /* the log, the practice misses and the car replays are part of the answer
+       too: undo used to leave the undone answer in the log, so every undo
+       wrote two rows for one answer and skewed the retention figure */
+    logLen: Array.isArray(S.log) ? S.log.length : 0,
+    logHead: Array.isArray(S.log) && S.log.length ? S.log[0] : null,
+    crep: JSON.parse(JSON.stringify(S.crep||{})),
+    pfail: JSON.parse(JSON.stringify(S.pfail||{})),
+    want: (S.want||[]).slice(),
+    stats: Sess.stats ? JSON.parse(JSON.stringify(Sess.stats)) : null,
     done: Sess.done};
 }
 function undoLast(){
@@ -2368,6 +3000,13 @@ function undoLast(){
   if(u.item) S.items[u.key]=u.item; else delete S.items[u.key];
   S.daily=u.daily; S.life=u.life; S.streak=u.streak;
   if(u.histVal===undefined) delete S.hist[u.histKey]; else S.hist[u.histKey]=u.histVal;
+  if(Array.isArray(S.log)){
+    if(S.log.length>u.logLen) S.log.length=u.logLen;
+    /* at the cap the answer pushed one row and trimmed the oldest, so the length
+       did not change: take the new row off and put the oldest back */
+    else if(S.log.length===u.logLen && u.logHead && S.log[0]!==u.logHead){ S.log.pop(); S.log.unshift(u.logHead); }
+  }
+  S.crep=u.crep; S.pfail=u.pfail; S.want=u.want; if(u.stats) Sess.stats=u.stats;
   Sess.done=u.done; Sess.undo=null; Sess.key=u.key; Sess.shown=false;
   touch(u.key); renderCard(); toast("Answer undone");
 }
@@ -2407,7 +3046,7 @@ function answer(gr){
   var k=Sess.key, fresh=!S.items[k], it=S.items[k]||newItem(), now=Date.now();
   Sess.undo=snapshot(k);
   var wasReview = it.s===1;
-  var next=schedule(it,gr,now,false);
+  var next=scheduleGraded(it,gr,now,false);
   next.seen=(it.seen||0)+1; next.ok=(it.ok||0)+(gr>0?1:0);
   S.items[k]=next;
   if(gr>0){
@@ -2418,7 +3057,8 @@ function answer(gr){
     if(S.pfail[k]) delete S.pfail[k];
   }
   if(fresh){
-    if(isSent(cardOf(k))) S.daily.sentDone++;
+    if(isSent(cardOf(k)) && cardOf(k).pk && dirOf(k)==="j") S.daily.packDone=(S.daily.packDone||0)+1;
+    else if(isSent(cardOf(k))) S.daily.sentDone++;
     else if(isConj(cardOf(k))) S.daily.conjDone++;
     else if(dirOf(k)==="j"){
       S.daily.newDone++;
@@ -2433,6 +3073,21 @@ function answer(gr){
   logReview(k, gr, it, now);
   if(!S.daily.missed) S.daily.missed={};
   if(gr===0) S.daily.missed[k]=1; else delete S.daily.missed[k];
+  var st=Sess.stats;
+  if(st){
+    st.ans++;
+    if(!st.seen[k]){ st.seen[k]=1; st.firstN++; if(gr>0) st.firstOk++; }
+    if(fresh && dirOf(k)==="j" && isWordId(k.split("|")[0]) && st.newW.indexOf(k.split("|")[0])<0) st.newW.push(k.split("|")[0]);
+    if(gr===0) st.missed[k]=1;
+  }
+  /* A sentence that keeps failing is almost always failing on a word he has
+     not met. After the second lapse its missing words go to the front of the
+     new-word queue, and the sentence waits (see held) until they are learned. */
+  var kc=cardOf(k);
+  if(gr===0 && isSent(kc) && !kc.pk && next.lapses>=2){
+    var miss=sentMissing(kc); S.want=S.want||[];
+    for(var mi=0;mi<miss.length;mi++) if(S.want.indexOf(miss[mi])<0 && !S.items[miss[mi]+"|j"]) S.want.unshift(miss[mi]);
+  }
   S.life.ans++; if(gr>0) S.life.ok++;
   if(!S.daily.buried) S.daily.buried={};
   if(!S.daily.done) S.daily.done={};
@@ -2452,10 +3107,7 @@ function answer(gr){
   if(next.s===1) S.daily.done[k]=1;
   var dk=S.daily.key; S.hist[dk]=(S.hist[dk]||0)+1;
   trimHist();
-  if(S.streak.last!==dk){
-    S.streak.cur = (S.streak.last===prevKey(dk,1)) ? S.streak.cur+1 : 1;
-    S.streak.best = Math.max(S.streak.best,S.streak.cur); S.streak.last=dk;
-  }
+  markActive(dk);
   Sess.done++; Sess.last=k;
   touch(k);
   /* A miss holds the screen once, with the words it is most likely confused
@@ -2526,6 +3178,30 @@ function trueRetention(days){
   }
   return {n:n, ok:ok, pct: n? ok/n : null};
 }
+/* A day counts when he studied, and a drive of five minutes or ten practice
+   answers is studying. One missed day in any seven is forgiven: a best streak
+   of eleven broke on a single day off, which punishes exactly the kind of
+   consistency the streak exists to reward. */
+function markActive(dk){
+  var ds=S.streak.days=(Array.isArray(S.streak.days)?S.streak.days:[]);
+  if(ds.indexOf(dk)<0){ ds.push(dk); if(ds.length>40) ds.splice(0, ds.length-40); }
+  if(S.streak.last===dk) return;
+  var cont = S.streak.last===prevKey(dk,1);
+  /* grace: the streak survives missed days as long as five of the last seven
+     (today included) were active; one gap a week was stricter than promised */
+  if(!cont && S.streak.last && daysBetween(S.streak.last,dk)<=3){
+    var n=0; for(var i=0;i<7;i++){ var k=prevKey(dk,i); if(ds.indexOf(k)>=0 || (S.hist[k]||0)>0) n++; }
+    if(n>=5) cont=true;
+  }
+  S.streak.cur = cont ? S.streak.cur+1 : 1;
+  S.streak.best = Math.max(S.streak.best,S.streak.cur); S.streak.last=dk;
+}
+function weekActive(){
+  var today=dayKey(Date.now()), n=0;
+  var ds=Array.isArray(S.streak.days)?S.streak.days:[];
+  for(var i=0;i<7;i++){ var k=prevKey(today,i); if((S.hist[k]||0)>0 || ds.indexOf(k)>=0) n++; }
+  return n;
+}
 function trimHist(){
   var ks=Object.keys(S.hist); if(ks.length<=400) return;
   ks.sort(); ks.slice(0,ks.length-400).forEach(function(k){delete S.hist[k];});
@@ -2574,7 +3250,8 @@ function audFetch(url){
     return c.match(url).then(function(hit){
       if(hit) return hit;
       return fetch(url).then(function(res){
-        if(res && res.ok) c.put(url, res.clone()).catch(function(){});
+        /* the write is waited for, so "downloaded" means stored */
+        if(res && res.ok) return c.put(url, res.clone()).then(function(){ return res; }, function(){ return res; });
         return res;
       });
     });
@@ -2607,7 +3284,10 @@ function audManifest(){
     .catch(function(){
       return audFetch(url).then(function(r){ if(!r||!r.ok) throw 0; return r.json(); });
     })
-    .then(function(m){ AUD.man=m; audPrune(m); return m; })
+    /* the listening banner and the car button both ask whether the library is
+       there; they used to keep their answer from before it arrived for up to a
+       minute, announcing that listening was paused while it was running */
+    .then(function(m){ AUD.man=m; audPrune(m); try{ if(!Sess.on) render(); }catch(e){} return m; })
     /* One tunnel at the start of a drive used to turn the pre-rendered voice off
        for the rest of the session. A failed attempt is just a failed attempt. */
     .catch(function(){ AUD.tried=false; return null; });
@@ -3012,7 +3692,9 @@ function carGapMs(){
   return clamp(Math.round(n),2,8)*1000;
 }
 function carDirection(){ var d=S.settings.carDir; return (d==="je"||d==="ej")?d:"mix"; }
-function carReady(){ return S.settings.tts!==false && ttsReady(); }
+/* the downloaded library is a voice too: a phone with it and no device voice
+   was told car mode "needs a Japanese voice" and the button was disabled */
+function carReady(){ return S.settings.tts!==false && (ttsReady() || audReady()); }
 function carFmt(sec){
   if(sec<60) return sec+" second"+(sec===1?"":"s");
   var m=Math.round(sec/60); return m+" minute"+(m===1?"":"s");
@@ -3047,6 +3729,9 @@ function carWords(){
     if(seen[x]) return; if(!isWordId(x)) return;
     if(reservedFor(x)) return;                 // held out of drilling for the check
     if(!inRotation(x+"|j")) return;
+    /* no single right way to ask it by ear: it shares its sound with another
+       card and cannot be asked from English either (ni the particle, ni two) */
+    var cx=IDX[x]; if(cx && (cx.sq || noReverse(cx)) && soundIsAmbiguous(x)) return;
     seen[x]=1;
     if(carHeardRecently(x) && !top[x]) back.push(x); else front.push(x);
   }
@@ -3087,12 +3772,17 @@ function carPick(){
   }
   return best;
 }
-function carAdvance(it){
-  it.reps++; CAR.heard++;
+function carAdvance(it, skipped){
+  it.reps++;
+  /* A skipped pass was not heard. It still moves the word on, but it does not
+     count as a play, and a word with a skipped pass is never claimed as
+     covered: three skips used to send a word to the back for two days. */
+  if(skipped) it.skipped=true; else CAR.heard++;
+  CAR.lastIt=it; CAR.lastEnd=Date.now();
   /* Coverage is only claimed for a word that finished all three passes. A word
      the drive cut off after one pass has never been produced from English, and
      suppressing it for two days would starve exactly the thinnest exposure. */
-  if(it.reps>=CAR_REPS && CAR.played.indexOf(it.id)<0) CAR.played.push(it.id);
+  if(it.reps>=CAR_REPS && !it.skipped && CAR.played.indexOf(it.id)<0) CAR.played.push(it.id);
   if(CAR.touched.indexOf(it.id)<0) CAR.touched.push(it.id);
   var el=carEl(), i=CAR.pool.indexOf(it);
   if(it.reps>=CAR_REPS){
@@ -3178,12 +3868,18 @@ async function carPlay(it, g){
      produce it from English on the way back. Recognition is the easier half. */
   var toJa = dir==="ej" || (dir==="mix" && it.reps>0);
   if(dir==="je") toJa=false;
+  /* Two cards that mean the same once the notes are off (ichi and hitotsu are
+     both "one") cannot be asked from English: either answer is right. Two that
+     sound the same (ni the number, ni the particle) cannot be asked from the
+     sound. Each is asked the one way that has a single answer. */
+  if(noReverse(c) || c.sq) toJa=false;      // one-way cards first: never from English
+  else if(soundIsAmbiguous(c.id) && dir!=="je") toJa=true;
 
   var kJa="wj:"+it.id, kEn="we:"+it.id;
   carPaint(it,"ask",toJa);
   if(toJa){
     carPhase("say this in Japanese");
-    await carSay(c.en,"en",1.0,kEn);               if(g!==CAR.gen) return;
+    await carSay(sayEn(c),"en",1.0,kEn);           if(g!==CAR.gen) return;
     await carHold(carGapMs());                     if(g!==CAR.gen) return;
     carPhase("the answer"); carPaint(it,"answer",toJa);
     await carSay(c.kana,"ja",rate,kJa);            if(g!==CAR.gen) return;
@@ -3196,7 +3892,7 @@ async function carPlay(it, g){
     await carSay(c.kana,"ja",rate,kJa);            if(g!==CAR.gen) return;
     await carHold(carGapMs());                     if(g!==CAR.gen) return;
     carPhase("the answer"); carPaint(it,"answer",toJa);
-    await carSay(c.en,"en",1.0,kEn);               if(g!==CAR.gen) return;
+    await carSay(sayEn(c),"en",1.0,kEn);           if(g!==CAR.gen) return;
     await carHold(300);                            if(g!==CAR.gen) return;
     await carSay(c.kana,"ja",rate,kJa);            if(g!==CAR.gen) return;
   }
@@ -3252,7 +3948,43 @@ async function carRun(g){
     await carPlay(it,g);
     if(g!==CAR.gen) return;
     carAdvance(it); CAR.mid=false;
+    carSaveProgress();
+    /* every fourth word, one of the survival phrases he has started: English
+       first, a gap to say it, then the Japanese */
+    CAR.n=(CAR.n||0)+1;
+    if(CAR.n%4===0){ await carPackLine(g); if(g!==CAR.gen) return; }
   }
+}
+function carPackLine(g){
+  var list=[];
+  for(var i=0;i<SENT.length;i++){ var x=SENT[i]; if(x.pk && inRotation(x.id+"|j")) list.push(x); }
+  if(!list.length) return Promise.resolve();
+  list.sort(function(a,b){ return a.pk-b.pk; });
+  var x=list[(CAR.pkI=(CAR.pkI||0)+1) % list.length], rate=S.settings.speechRate||0.85;
+  return (async function(){
+    carPhase("a phrase to keep");
+    var e=document.getElementById("carEn"), r=document.getElementById("carRomaji"), k=document.getElementById("carKana");
+    if(e) e.textContent=x.en; if(r) r.textContent=HIDDEN; if(k) k.textContent="";
+    await carSay(x.en,"en",1.0,"se:"+x.id);          if(g!==CAR.gen) return;
+    await carHold(carGapMs()+1500);                   if(g!==CAR.gen) return;
+    if(r) r.textContent=x.romaji; if(k) k.textContent=x.kana;
+    await carSay(x.kana,"ja",rate,"sj:"+x.id);        if(g!==CAR.gen) return;
+    CAR.sent++;
+    await carHold(900);
+  })();
+}
+/* A drive's totals used to be written only when it ended, so a drive iOS
+   killed while paused was lost whole, including which words it had covered.
+   They are written after every word now. */
+function carSaveProgress(){
+  var secs=Math.max(0,Math.round(carEl()/1000)), add=secs-(CAR.secSaved||0);
+  if(add>0){ S.life.carSec=(S.life.carSec||0)+add; S.daily.carSec=(S.daily.carSec||0)+add; CAR.secSaved=secs; }
+  var h=CAR.heard-(CAR.heardSaved||0); if(h>0){ S.life.carHeard=(S.life.carHeard||0)+h; CAR.heardSaved=CAR.heard; }
+  var sn=CAR.sent-(CAR.sentSaved||0); if(sn>0){ S.life.carSent=(S.life.carSent||0)+sn; CAR.sentSaved=CAR.sent; }
+  var stamp=Math.round(Date.now()/1000);
+  for(var i=0;i<CAR.played.length;i++) if(!CAR.stamped[CAR.played[i]]){ S.carSeen[CAR.played[i]]=stamp; CAR.stamped[CAR.played[i]]=1; }
+  if((S.daily.carSec||0)>=300) markActive(S.daily.key);
+  save();
 }
 
 function carStart(){
@@ -3288,7 +4020,8 @@ function carBegin2(ids){
   CAR.backlog=(ids||CAR.ids||carWords()).slice(); CAR.pool=[];
   for(var i=0;i<CAR_ACTIVE && CAR.backlog.length;i++) CAR.pool.push(carMake(CAR.backlog.shift()));
   CAR.item=null; CAR.mid=false; CAR.heard=0; CAR.sent=0; CAR.warned=false;
-  CAR.played=[]; CAR.touched=[]; CAR.again={};
+  CAR.played=[]; CAR.touched=[]; CAR.again={}; CAR.stamped={};
+  CAR.secSaved=0; CAR.heardSaved=0; CAR.sentSaved=0; CAR.n=0; CAR.lastIt=null; CAR.lastEnd=0;
   CAR.started=Date.now();
   CAR.endAt = carOpenEnded() ? Infinity : CAR.started+carMinutes()*60000;
   document.getElementById("carCheck").hidden=true;
@@ -3300,7 +4033,18 @@ function carBegin2(ids){
   carRun(CAR.gen);
 }
 function carRepeat(){
-  if(!CAR.running || !CAR.item || CAR.paused || !CAR.mid) return;
+  if(!CAR.running || CAR.paused) return;
+  /* Repeat between two words used to do nothing at all, silently: it only
+     acted mid-word. Within ten seconds of a word ending it replays that word. */
+  if(!CAR.mid && CAR.lastIt && Date.now()-CAR.lastEnd<10000){
+    var lid=CAR.lastIt.id, li=CAR.lastIt;
+    S.crep[lid]=Math.min(9,(S.crep[lid]||0)+1); CAR.again[lid]=1; save();
+    carBump();
+    var g0=CAR.gen;
+    (async function(){ await carPlay(Object.assign({},li,{reps:Math.max(0,li.reps-1)}),g0); if(g0!==CAR.gen) return; CAR.lastEnd=Date.now(); carRun(g0); })();
+    return;
+  }
+  if(!CAR.item || !CAR.mid) return;
   var id=CAR.item.id;
   S.crep[id]=Math.min(9,(S.crep[id]||0)+1);
   CAR.again[id]=1; save();
@@ -3320,7 +4064,7 @@ function carSkip(){
      played. Releasing the wait and moving on is the whole job. */
   var it=CAR.mid ? CAR.item : null;
   carBump();
-  if(it){ carAdvance(it); CAR.mid=false; }
+  if(it){ carAdvance(it, true); CAR.mid=false; }
   carRun(CAR.gen);
 }
 function carPause(auto){
@@ -3328,6 +4072,7 @@ function carPause(auto){
   CAR.paused=true; CAR.auto=!!auto; CAR.pausedAt=Date.now();
   carBump();
   carPhase(auto ? "paused, the app left the screen" : "paused");
+  try{ if("mediaSession" in navigator) navigator.mediaSession.metadata=new MediaMetadata({title:"Paused", artist:"press play to go on", album:"Kana Ladder car mode"}); }catch(e){}
   var b=document.getElementById("carPause"); if(b) b.textContent="Resume";
   try{ if(CAR.audio) CAR.audio.pause(); }catch(e){}
   try{ if("mediaSession" in navigator) navigator.mediaSession.playbackState="paused"; }catch(e){}
@@ -3359,12 +4104,8 @@ function carResume(){
 function carFinish(){
   if(!CAR.running) return;
   var secs=Math.max(0,Math.round(carEl()/1000));
+  carSaveProgress();
   CAR.running=false; CAR.paused=false; carBump();
-  S.life.carSec=(S.life.carSec||0)+secs;
-  S.life.carHeard=(S.life.carHeard||0)+CAR.heard;
-  S.life.carSent=(S.life.carSent||0)+CAR.sent;
-  var stamp=Math.round(Date.now()/1000);
-  for(var i=0;i<CAR.played.length;i++) S.carSeen[CAR.played[i]]=stamp;
   carPrune();
   save();
   carWakeOff(); carAudioOff();
@@ -3381,7 +4122,7 @@ function carSummary(secs){
   var el=document.getElementById("carDone"); if(!el) return;
   el.hidden=false;
   carPhase("drive over");
-  var clk=document.getElementById("carClock"); if(clk) clk.textContent="\u2014";
+  var clk=document.getElementById("carClock"); if(clk) clk.textContent="-";
   document.getElementById("carDoneHead").textContent =
     CAR.heard+" play"+(CAR.heard===1?"":"s")+" over "+carFmt(secs);
   document.getElementById("carDoneSub").textContent =
@@ -3399,9 +4140,9 @@ function carSummary(secs){
             '<span class="cd-en">'+esc(c.en)+'</span></div>';
     }
     list.innerHTML='<div class="cd-h">You asked for these again</div>'+rows+
-      '<div class="fine">They are flagged for Focus.</div>';
+      '<div class="fine">They go first in your next Practice.</div>';
     list.hidden=false; fb.hidden=false;
-    fb.textContent="Focus on these now";
+    fb.textContent="Practice these now";
   } else {
     list.hidden=true; list.innerHTML=""; fb.hidden=true;
   }
@@ -3424,9 +4165,16 @@ function carWakeOn(){
       CAR.waking=false;
       CAR.wake=w;
       try{ w.addEventListener("release",function(){ CAR.wake=null; }); }catch(e){}
-    }).catch(function(){ CAR.waking=false; });
+    }).catch(function(){ CAR.waking=false; carWakeFail(); });
     else CAR.waking=false;
   }catch(e){ CAR.waking=false; }
+  if(!navigator.wakeLock) carWakeFail();
+}
+/* iOS only honours a wake lock in a Home Screen app from 18.4 on, and a
+   refusal used to be swallowed: the screen locked, the drive paused, silence. */
+function carWakeFail(){
+  var el=document.getElementById("carSafe");
+  if(el) el.textContent="This phone would not keep the screen on. Set Auto-Lock to Never (Settings, Display) while you drive.";
 }
 function carWakeOff(){ CAR.waking=false; try{ if(CAR.wake){ CAR.wake.release(); CAR.wake=null; } }catch(e){} }
 /* A silent loop holds the media session open, which is what puts pause, next
@@ -3445,6 +4193,9 @@ function carMediaInit(){
     navigator.mediaSession.setActionHandler("pause",function(){ carPause(false); });
     navigator.mediaSession.setActionHandler("nexttrack",function(){ carSkip(); });
     navigator.mediaSession.setActionHandler("previoustrack",function(){ carRepeat(); });
+    /* some head units only show ten-second skip buttons */
+    try{ navigator.mediaSession.setActionHandler("seekforward",function(){ carSkip(); }); }catch(e1){}
+    try{ navigator.mediaSession.setActionHandler("seekbackward",function(){ carRepeat(); }); }catch(e2){}
     navigator.mediaSession.playbackState="playing";
   }catch(e){}
 }
@@ -3463,14 +4214,14 @@ function carPaint(it, stage, toJa){
   var en = show || !!toJa;       // the English is the prompt on a production pass
   if(r) r.textContent = jp ? c.romaji : HIDDEN;
   if(k) k.textContent = jp ? c.kana : "";
-  if(e) e.textContent = en ? c.en : HIDDEN;
+  if(e) e.textContent = en ? glossParts(c.en).core : HIDDEN;
   var n=document.getElementById("carRep");    if(n) n.textContent="pass "+(it.reps+1)+" of "+CAR_REPS;
   /* The head unit is a screen at eye level. Showing the word and its meaning
      there during the silent gap undid the blanking above, so it carries the
      answer only once the answer has been said. */
   if("mediaSession" in navigator){
     try{ navigator.mediaSession.metadata=new MediaMetadata(show
-      ? {title:c.romaji, artist:c.en, album:"Kana Ladder car mode"}
+      ? {title:c.romaji, artist:sayEn(c), album:"Kana Ladder car mode"}
       : {title:"Kana Ladder", artist:"listen", album:"Kana Ladder car mode"}); }catch(err){}
   }
 }
@@ -3528,7 +4279,7 @@ function bindCar(){
   var dn=document.getElementById("carDoneBtn");
   if(dn) dn.addEventListener("click",function(){ carLeave(); });
   var tf=document.getElementById("carToFocus");
-  if(tf) tf.addEventListener("click",function(){ carLeave(); startFocus(); });
+  if(tf) tf.addEventListener("click",function(){ var ids=Object.keys(CAR.again||{}); carLeave(); startFocus(ids); });
   document.addEventListener("visibilitychange",function(){
     if(!CAR.running) return;
     if(document.visibilityState!=="visible") carPause(true);
@@ -3539,9 +4290,9 @@ function bindCar(){
 /* ---------- the trip check ---------- */
 /* Every number the app shows is derived from cards it has drilled and he has
    graded himself. This is the one measurement that is not: a fixed reserved
-   pool that no mode ever teaches, tested objectively, every fortnight, with a
+   pool that no mode ever teaches, tested objectively, every week, with a
    verdict that is allowed to be bad news. */
-var CHECK_EVERY=14, CHECK_N=24;
+var CHECK_N=24;
 function reservedFor(id){
   // a stable hash so the same cards are held out on every device and every build
   var h=0; for(var i=0;i<id.length;i++) h=(h*31+id.charCodeAt(i))>>>0;
@@ -3564,11 +4315,28 @@ function checkPool(){
   }
   return out;
 }
-function checkReady(){ return checkPool().length>=12; }
+/* The check measured single words from a fixed held-out pool, which at his
+   pace would reach its minimum of twelve on about the day of the flight. It
+   now also asks the trip itself: a staff line heard and understood, and his
+   own line picked out from English, from every scene line he can read. */
+function sceneCheckPool(){
+  var hear=[], say=[];
+  if(typeof SCENES==="undefined") return {hear:hear, say:say};
+  /* a line used in two scenes is one line: counted twice, the button could
+     offer the check and then refuse to start it */
+  var seen={};
+  for(var i=0;i<SCENES.length;i++){ var sc=SCENES[i];
+    for(var j=0;j<sc.lines.length;j++){ var l=sc.lines[j], x=SIDX[l.sid]; if(!x || !sentOpen(x)) continue;
+      var sk=l.who+"|"+l.sid; if(seen[sk]) continue; seen[sk]=1;
+      (l.who==="them"?hear:say).push({x:x, sc:sc}); } }
+  return {hear:hear, say:say};
+}
+function checkReady(){ var sp=sceneCheckPool(); return checkPool().length>=12 || (sp.hear.length+sp.say.length)>=8; }
+function checkNeed(){ var sp=sceneCheckPool(); return Math.max(0, 8-(sp.hear.length+sp.say.length)); }
 function checkDue(){
   if(!checkReady()) return false;
   var last=(S.checks&&S.checks.length)? S.checks[S.checks.length-1].t : 0;
-  var gap=CHECK_EVERY;
+  var gap=7;                          // weekly from here to the trip
   var d=tripDays();
   if(d!==null && d<=28) gap=7;        // weekly in the last month
   return (Date.now()-last)/86400000 >= gap;
@@ -3583,21 +4351,38 @@ function checkBuild(){
       var q=null;
       // a homophone has two right answers to one clip, here as anywhere else
       if(kind==="listen") q=soundIsAmbiguous(c.id) ? null : makeQuestion("mcAudio", c.id);
-      else if(kind==="produce") q={kind:"ctype", id:c.id, key:c.id+"|e"};
+      else if(kind==="produce") q=noReverse(c) ? null : {kind:"ctype", id:c.id, key:c.id+"|e"};
       else if(kind==="read") q=makeQuestion("mcJE", c.id);
       else if(kind==="conj") q=makeQuestion("conj", c.id);
       if(q){ q.block=kind; items.push(q); got++; }
     }
     return got;
   }
-  take("listen",per); take("produce",per); take("read",per); take("conj",per);
-  while(items.length<CHECK_N && take("read",1)){}
+  if(pool.length>=12){ take("listen",3); take("produce",3); take("read",3); take("conj",3); }
+  var sp=sceneCheckPool(), used={};
+  function sceneQ(list, kind, n){
+    shuffle(list);
+    for(var i=0;i<list.length && n>0;i++){
+      var e=list[i]; if(used[e.x.id]) continue;
+      var others=list.filter(function(o){ return o.x.id!==e.x.id; });
+      if(others.length<3){ others=others.concat((kind==="hear"?sp.say:sp.hear).filter(function(o){ return o.x.id!==e.x.id; })); }
+      shuffle(others);
+      var wrong=[], seenT={}; seenT[kind==="hear"?e.x.en:e.x.romaji]=1;
+      for(var j=0;j<others.length && wrong.length<3;j++){ var t=kind==="hear"?others[j].x.en:others[j].x.romaji; if(seenT[t]) continue; seenT[t]=1; wrong.push(others[j].x); }
+      if(wrong.length<3) continue;
+      used[e.x.id]=1; n--;
+      var opts=shuffle(wrong.map(function(w){ return kind==="hear" ? {text:w.en, ok:false} : {text:w.romaji, ok:false}; })
+        .concat([kind==="hear" ? {text:e.x.en, ok:true} : {text:e.x.romaji, ok:true}]));
+      items.push({block:kind, id:e.x.id, sc:e.sc.id, sent:e.x, opts:opts});
+    }
+  }
+  sceneQ(sp.hear.slice(), "hear", 6); sceneQ(sp.say.slice(), "say", 6);
   return shuffle(items);
 }
 function startCheck(){
   var q=checkBuild();
   if(q.length<8){ toast("Not enough held-out words yet. Study a little more first."); return; }
-  CHK={on:true, q:q, i:0, right:0, block:{}, answered:false};
+  CHK={on:true, q:q, i:0, right:0, block:{}, scn:{}, answered:false};
   go("check"); document.getElementById("tabs").classList.add("hide");
   renderCheck();
 }
@@ -3613,13 +4398,15 @@ function renderCheck(){
   var q=CHK.q[CHK.i], c=IDX[q.id];
   document.getElementById("checkCount").textContent=(CHK.i+1)+" of "+CHK.q.length;
   var head="", body="";
-  if(q.block==="listen"){ head="What did you hear?"; body='<button class="playbig" id="chkPlay">'+SPK+'</button>'; }
+  if(q.block==="hear"){ head="Someone says this. What does it mean?"; body='<button class="playbig" id="chkPlay">'+SPK+'</button>'; }
+  else if(q.block==="say"){ head="How do you say this?"; body='<div class="chk-en">'+esc(q.sent.en)+'</div>'; }
+  else if(q.block==="listen"){ head="What did you hear?"; body='<button class="playbig" id="chkPlay">'+SPK+'</button>'; }
   else if(q.block==="produce"){ head="Type it in romaji";
     body='<div class="chk-en">'+esc(c.en)+'</div>'+
          '<input id="chkIn" class="typein" autocomplete="off" autocapitalize="off" spellcheck="false">'+
          '<button class="btn" id="chkGo">Answer</button>'; }
-  else if(q.block==="read"){ head="What does this mean?"; body='<div class="chk-jp">'+esc(c.kana)+'</div>'; }
-  else { head=q.ask||"Which form is it?"; body='<div class="chk-jp">'+esc(c.base||c.kana)+'</div>'; }
+  else if(q.block==="read"){ head="What does this mean?"; body='<div class="chk-jp">'+esc(c.kana)+'</div><div class="chk-rm">'+esc(c.romaji)+'</div>'; }
+  else { head=q.ask||"Which form is it?"; body='<div class="chk-jp">'+esc(c.base||c.kana)+'</div><div class="chk-rm">'+esc(c.baseRomaji||c.romaji)+'</div>'; }
   var opts="";
   if(q.opts){
     for(var i=0;i<q.opts.length;i++)
@@ -3627,28 +4414,33 @@ function renderCheck(){
             (q.opts[i].sub?'<span class="sub">'+esc(q.opts[i].sub)+'</span>':'')+'</button>';
   }
   el.innerHTML='<div class="chk-h">'+esc(head)+'</div>'+body+'<div class="opts">'+opts+'</div>';
-  if(q.block==="listen"){
+  if(q.block==="listen" || q.block==="hear"){
+    var who = q.block==="hear" ? q.sent : c;
     var pb=document.getElementById("chkPlay");
-    pb.addEventListener("click",function(){ speakCard(c); });
-    speakCard(c);
+    pb.addEventListener("click",function(){ speakCard(who); });
+    speakCard(who);
   }
   if(q.block==="produce"){
     document.getElementById("chkGo").addEventListener("click",function(){
       var v=document.getElementById("chkIn").value;
-      checkScore("produce", romajiMatches(v, c.romaji)); CHK.i++; renderCheck();
+      checkScore("produce", answerMatches(v, c)); CHK.i++; renderCheck();
     });
   }
   Array.prototype.forEach.call(el.querySelectorAll(".opt-btn"),function(b){
     b.addEventListener("click",function(){
-      checkScore(q.block, !!q.opts[+b.dataset.opt].ok); CHK.i++; renderCheck();
+      var ok=!!q.opts[+b.dataset.opt].ok;
+      checkScore(q.block, ok);
+      if(q.sc){ var t=CHK.scn[q.sc]||{n:0,ok:0}; t.n++; if(ok) t.ok++; CHK.scn[q.sc]=t; }
+      CHK.i++; renderCheck();
     });
   });
 }
 function endCheck(){
   CHK.on=false;
   var pct=CHK.q.length? CHK.right/CHK.q.length : 0;
-  var rec={t:Date.now(), n:CHK.q.length, ok:CHK.right, block:{}};
+  var rec={t:Date.now(), n:CHK.q.length, ok:CHK.right, block:{}, scn:{}};
   for(var k in CHK.block) rec.block[k]=CHK.block[k];
+  for(var k2 in (CHK.scn||{})) rec.scn[k2]=CHK.scn[k2];
   if(!S.checks) S.checks=[];
   S.checks.push(rec);
   if(S.checks.length>20) S.checks.splice(0, S.checks.length-20);
@@ -3678,22 +4470,29 @@ function endCheck(){
 function renderCheckPanel(){
   var el=document.getElementById("checkNote"); if(!el) return;
   var h=S.checks||[];
-  if(!h.length){ el.textContent="Never taken. It is 24 held-out items, about three minutes, and nothing in it is ever drilled."; }
+  if(!h.length){ el.textContent="Never taken. A few minutes: staff lines to understand, your own lines to pick out, and words held out of every drill. Weekly from here to the trip."; }
   else {
     var last=h[h.length-1], pct=Math.round(last.ok/last.n*100);
-    var parts=[];
-    for(var k in last.block) parts.push(k+" "+Math.round(last.block[k].ok/last.block[k].n*100)+"%");
+    var parts=[], BL={hear:"understanding staff", say:"saying your lines", listen:"hearing words", produce:"typing words", read:"reading words", conj:"forms"};
+    for(var k in last.block) parts.push((BL[k]||k)+" "+Math.round(last.block[k].ok/last.block[k].n*100)+"%");
+    if(last.scn){ var weakS=[];
+      for(var sid in last.scn){ var sc0=sceneById(sid), t=last.scn[sid]; if(sc0 && t.n && t.ok/t.n<0.6) weakS.push(sc0.title); }
+      if(weakS.length) parts.push("weakest: "+weakS.slice(0,3).join(", ")); }
     var delta="";
     if(h.length>1){ var prev=h[h.length-2];
       var d=pct-Math.round(prev.ok/prev.n*100);
       delta=(d>=0?" up ":" down ")+Math.abs(d)+" points since last time."; }
     el.textContent = pct+"% overall ("+parts.join(", ")+")."+delta+
       (pct<50 ? " On this evidence you will not follow spoken Japanese yet." :
-       pct<75 ? " Useable, but the weakest block is where the next fortnight should go." :
+       pct<75 ? " Useable, but the weakest block is where the next week should go." :
                 " Strong enough to transact in the areas covered.");
   }
+  /* "Take it again anyway" on a check never taken, which then refused to start */
   var b=document.getElementById("checkBtn");
-  if(b) b.textContent = checkDue()? "Take the trip check" : "Take it again anyway";
+  if(b){
+    if(!checkReady()){ b.disabled=true; b.textContent="Opens once you can read "+checkNeed()+" more scene line"+(checkNeed()===1?"":"s"); }
+    else { b.disabled=false; b.textContent = (!h.length || checkDue()) ? "Take the trip check" : "Take it again"; }
+  }
 }
 /* ---------- rendering: home ---------- */
 function stateOf(it){
@@ -3707,65 +4506,56 @@ function render(){
   var c=counts();
   setTile("tileNew",c.newN); setTile("tileLrn",c.lrnN); setTile("tileDue",c.dueN);
   var total=c.newN+c.lrnN+c.dueN;
-  var btn=document.getElementById("startBtn"), ahead=document.getElementById("aheadBtn");
+  var btn=document.getElementById("startBtn"), ahead=document.getElementById("aheadBtn"), more=document.getElementById("moreBtn");
   var note=document.getElementById("startNote");
+  /* One thing to press, with what it costs. "Study ahead instead" sat under it
+     while 88 cards were due, inviting him to skip them; it now appears only
+     when the day is done. */
+  var canMore = !inTaper() && !S.daily.noNew && S.settings.newPerDay>0 && c.p.nw.length>0;
   if(total>0){
     btn.disabled=false;
-    btn.textContent="Start review · "+total+" card"+(total>1?"s":"");
+    btn.textContent="Start review · "+total+" card"+(total>1?"s":"")+" · about "+minutesFor(total)+" min";
     btn.dataset.mode="today";
-    ahead.hidden=false; ahead.textContent="Study ahead instead";
+    ahead.hidden=true; more.hidden=true;
     var b=newBonus();
-    note.textContent = b>0 ? b+" extra new word"+(b>1?"s":"")+" earned by easy answers today" : "";
+    note.textContent = c.p.rev.length>CATCHUP ? "Catching up: "+c.p.rev.length+" reviews due, done first. Stop at any card, everything is saved."
+      : (b>0 ? b+" extra new word"+(b>1?"s":"")+" today" : "Stop at any card, everything is saved.");
   } else {
-    btn.disabled = c.aheadN===0;
-    btn.textContent = c.aheadN===0 ? "Nothing to pull forward" : "Study ahead";
+    btn.disabled = c.aheadN===0 && !canMore;
     btn.dataset.mode="ahead";
-    ahead.hidden=true;
+    btn.textContent = canMore ? "Add 3 more new words" : (c.aheadN===0 ? "All done for today" : "Study ahead");
+    if(canMore) btn.dataset.mode="more";
+    more.hidden=true;
+    ahead.hidden = !(canMore && c.aheadN>0); ahead.textContent="Study ahead";
     var p=c.p;
     var held=buriedCount();
     note.textContent = p.lrn.length
-      ? p.lrn.length+" learning card"+(p.lrn.length>1?"s":"")+" return in "+ivLabel(S.items[p.lrn[0]].due-Date.now())+". Study ahead runs with no cap."
-      : (held ? held+" follow-up card"+(held>1?"s":"")+" for the words you studied today are held until tomorrow, so no word is tested twice in one day. Study ahead skips them too."
-              : "Today's scheduled queue is clear. Study ahead pulls tomorrow's cards forward, with no limit.");
+      ? p.lrn.length+" card"+(p.lrn.length>1?"s":"")+" you are retrying come back in "+ivLabel(S.items[p.lrn[0]].due-Date.now())+"."
+      : (held ? held+" follow-up card"+(held>1?"s":"")+" wait until tomorrow, so no word is asked both ways in one day."
+              : "Today's reviews are done. New words are a floor, never a cap: add more whenever you like.");
   }
   renderLevel();
-  updateBadge(total);
+  updateBadge(Math.min(total, ROUND_N));
   renderPracticePanel();
 
-  /* The rail must account for every schedulable card, and the word count must
-     count only words. Mixing sentence and conjugation ids into "words started"
-     inflates it, and leaving conjugation out of the total made the four rail
-     numbers fail to add up to the deck. */
-  var mat=0,yng=0,lrn=0,words={};
-  for(var k in S.items){ var st=stateOf(S.items[k]); if(st==="mat")mat++; else if(st==="yng")yng++; else lrn++;
-    var wid=k.split("|")[0], wc=IDX[wid];
-    if(wc && !isSent(wc) && !isConj(wc)) words[wid]=1; }
-  var lsOn = listenOn();
-  var perWord = 1 + (S.settings.reverse==="off"?0:1) + (lsOn?1:0);
-  var totalCards = DECK.length*perWord
-    + (S.settings.sentences!==false ? SENT.length*(1+(lsOn?1:0)) : 0)
-    + (S.settings.conj!==false ? CONJ.length : 0);
-  var touched=mat+yng+lrn, nwords=Object.keys(words).length;
-  /* The header counts words, the legend counts cards, and a word makes up to
-     three of them. Shown side by side with no unit those two read as a
-     contradiction, so both units are now stated outright. */
-  document.getElementById("progAux").textContent=
-    nwords.toLocaleString()+" words · "+touched.toLocaleString()+" cards started";
-  var rail=document.getElementById("rail").children;
-  rail[0].style.width=(mat/totalCards*100)+"%";
-  rail[1].style.width=(yng/totalCards*100)+"%";
-  rail[2].style.width=(lrn/totalCards*100)+"%";
-  document.getElementById("lgMat").textContent=mat;
-  document.getElementById("lgYng").textContent=yng;
-  document.getElementById("lgLrn").textContent=lrn;
-  document.getElementById("lgNew").textContent=Math.max(0,totalCards-touched);
-
   document.getElementById("kvAns").textContent=S.daily.ans;
-  document.getElementById("kvAcc").textContent=S.daily.ans?Math.round(S.daily.ok/S.daily.ans*100)+"%":"—";
+  document.getElementById("kvAcc").textContent=S.daily.ans?Math.round(S.daily.ok/S.daily.ans*100)+"%":"-";
   document.getElementById("kvNewToday").textContent=S.daily.newDone;
   var kb=document.getElementById("kvBackup");
   kb.textContent=backupLabel();
   kb.style.color = backupStale()?"var(--ohdo)":"";
+  var wa=document.getElementById("weekAux"); if(wa) wa.textContent=weekActive()+" of the last 7 days";
+  var bw=document.getElementById("backupWarn");
+  if(bw){
+    var stale=backupStale();
+    bw.hidden=!stale;
+    if(stale){
+      var bd=backupDays();
+      bw.innerHTML=(bd===null ? "<b>No backup yet.</b> " : "<b>Last backup "+bd+" days ago.</b> ")+
+        "Your progress lives only on this phone. <button class=\"lk\" id=\"bwGo\">Back up now</button>";
+      var bg=document.getElementById("bwGo"); if(bg) bg.addEventListener("click",doBackup);
+    }
+  }
   renderStats();
 }
 function tripDays(){
@@ -3780,18 +4570,64 @@ function tripDays(){
    that can still mature. */
 var TAPER_DAYS=10;
 function inTaper(){ var d=tripDays(); return d!==null && d<=TAPER_DAYS && d>=0; }
+/* Words met, counted as words: the old figure counted every Japanese to
+   English card, so his 43 sentences made 91 words read as 134. The projection
+   also forgot the ten-day taper and the days he does not study; it now runs
+   over the days new words are actually taken, at his recent pace, as a range. */
+function wordsMet(){
+  var n=0;
+  for(var k in S.items){ if(dirOf(k)!=="j" || S.susp[k]) continue; var id=k.split("|")[0], c=IDX[id];
+    if(c && isWordId(id) && !c.dup) n++; }
+  return n;
+}
+function activeShare(days){
+  var today=dayKey(Date.now()), n=0, ds=Array.isArray(S.streak.days)?S.streak.days:[];
+  for(var i=1;i<=days;i++){ var k=prevKey(today,i); if((S.hist[k]||0)>0 || ds.indexOf(k)>=0) n++; }
+  return n/days;
+}
+function tripProjection(){
+  var d=tripDays(); if(d===null || d<0) return null;
+  var met=wordsMet(), intake=Math.max(0, d-TAPER_DAYS), per=S.settings.newPerDay||0;
+  var share=Math.max(0.3, activeShare(14));
+  var hi=met+intake*per, mid=met+Math.round(intake*per*share), lo=met+Math.round(intake*per*share*0.85);
+  return {d:d, met:met, lo:Math.min(lo,mid), mid:mid, hi:hi, per:per};
+}
+function nextSceneInfo(){
+  if(typeof SCENES==="undefined") return null;
+  var best=null;
+  for(var i=0;i<SCENES.length;i++){
+    var sc=SCENES[i]; if(sceneReady(sc)) continue;
+    var g=sceneNeed(sc);
+    if(!best || g<best.n) best={sc:sc, n:g};
+  }
+  return best;
+}
 function renderTrip(){
-  var el=document.getElementById("tripNote"); if(!el) return;
+  var el=document.getElementById("tripNote"), aux=document.getElementById("tripAux");
+  var card=document.getElementById("tripCard");
+  if(!el) return;
   var d=tripDays();
-  if(d===null){ el.hidden=true; return; }
-  el.hidden=false;
-  if(d<0){ el.textContent="The trip date has passed. Clear it in Settings."; return; }
-  var met=0; for(var k in S.items){ if(dirOf(k)==="j" && S.items[k] && !S.susp[k]) met++; }
-  var perDay=newAllowance();
-  var proj=met+Math.max(0,d)*Math.min(perDay, INTRO.length);
-  el.textContent = d+" day"+(d===1?"":"s")+" to go. "+met+" words met, about "+
-    Math.round(proj)+" by then at "+perDay+" a day"+
-    (inTaper()? ". New words are paused for the last "+TAPER_DAYS+" days so the rest can settle." : ".");
+  if(d===null){ el.hidden=false; el.textContent="Set your trip date in Settings to see how far you will get."; if(aux) aux.textContent=""; }
+  else if(d<0){ el.hidden=false; el.textContent="The trip date has passed. Clear it in Settings."; if(aux) aux.textContent=""; }
+  else {
+    el.hidden=false;
+    var pj=tripProjection();
+    if(aux) aux.textContent=d+" day"+(d===1?"":"s")+" to go";
+    el.textContent = pj.met+" words met. At "+pj.per+" a day and your recent pace, about "+pj.mid+
+      " by the trip (between "+pj.lo+" and "+pj.hi+")."+
+      (inTaper()? " New words are paused for the last "+TAPER_DAYS+" days so the rest can settle." : "");
+  }
+  var ns=document.getElementById("nextScene"), qb=document.getElementById("queueScenes");
+  if(ns && typeof SCENES!=="undefined"){
+    var rdy=0; for(var i=0;i<SCENES.length;i++) if(sceneReady(SCENES[i])) rdy++;
+    var nx=nextSceneInfo();
+    ns.hidden=false;
+    ns.innerHTML='<b>'+rdy+' of '+SCENES.length+'</b> scenes ready to rehearse'+
+      (nx ? '. Next: <b>'+esc(nx.sc.title)+'</b>, '+nx.n+' word'+(nx.n===1?"":"s")+' to go.' : '.');
+    var pend=allSceneWords().length;
+    if(qb){ qb.hidden = !pend || !!S.daily.noNew; qb.textContent="Learn the words the scenes need first ("+pend+")"; }
+    var cdb=document.getElementById("checkDueBtn"); if(cdb) cdb.hidden=!checkDue();
+  }
 }
 function renderPracticePanel(){
   var sw=document.getElementById("noNewSw");
@@ -3821,7 +4657,9 @@ function renderPracticePanel(){
   }
   var sb=document.getElementById("scenesBtnSub");
   if(sb){ var rdy=0; for(var si=0;si<SCENES.length;si++) if(sceneReady(SCENES[si])) rdy++;
-    sb.textContent = rdy ? rdy+" of "+SCENES.length+" ready to rehearse" : "learn a few words first"; }
+    var nx=nextSceneInfo();
+    sb.textContent = (rdy ? rdy+" of "+SCENES.length+" ready to rehearse" : "listen or shadow any scene now")+
+      (nx ? "; next: "+nx.sc.title+", "+nx.n+" word"+(nx.n===1?"":"s")+" to go" : ""); }
   var cb=document.getElementById("carBtn"), cs=document.getElementById("carBtnSub");
   if(cb){
     var words=0;
@@ -3830,7 +4668,7 @@ function renderPracticePanel(){
     cb.disabled = noVoice || words===0;
     if(cs) cs.textContent = noVoice
       ? "needs a Japanese voice on this device"
-      : (words ? carMinutes()+" minutes, audio only, eyes on the road"
+      : (words ? (carOpenEnded() ? "until you stop" : carMinutes()+" minutes")+", audio only, eyes on the road"
                : "nothing met yet");
   }
   var weak=weakWords(), fb=document.getElementById("focusBtn"),
@@ -3839,8 +4677,8 @@ function renderPracticePanel(){
     fb.disabled = false;
     if(fs) fs.textContent = weak.length
       ? Math.min(weak.length,FOCUS_WORDS)+" word"+(weak.length>1?"s":"")+
-        " you are struggling with, drilled from three angles each"
-      : (n ? "nothing is going badly, so a mixed draw over the "+n+" you have met"
+        " you are finding hard, asked a few different ways"
+      : (n ? "nothing is going badly, so a mixed draw over the "+n+" cards you have met"
            : "nothing met yet");
   }
 }
@@ -3852,44 +4690,54 @@ function renderCarNumbers(){
 function setTile(id,n){var el=document.getElementById(id); el.querySelector(".n").textContent=n; el.classList.toggle("zero",n===0);}
 
 var LAST=null;
+function levelName(L){ return (L.ro ? L.ro+" \u00b7 " : "")+L.en; }
 function renderLevel(){
   var sp=scoreParts(); LAST=sp;
   var sc=Math.round(sp.score), L=levelOf(sc), N=nextLevel(L);
   var pct = N ? (sc-L.min)/(N.min-L.min) : 1;
   document.getElementById("lvlN").textContent="Level "+L.n;
-  document.getElementById("lvlName").textContent=L.ja+" · "+L.en;
+  document.getElementById("lvlName").textContent=levelName(L);
   document.getElementById("lvlFill").style.width=Math.max(2,Math.round(pct*100))+"%";
-  document.getElementById("lvlScore").textContent=sc+" / "+DECK.length;
+  document.getElementById("lvlScore").textContent=sc+" point"+(sc===1?"":"s");
   document.getElementById("lvlNext").textContent = N ? (N.min-sc)+" to Level "+N.n : "top level";
   var sa=document.getElementById("streakAux");
-  if(sa) sa.textContent = S.streak.cur
-    ? S.streak.cur+" day"+(S.streak.cur>1?"s":"")+" · best "+S.streak.best : "not started";
+  if(sa) sa.textContent = (S.streak.cur ? S.streak.cur+" day"+(S.streak.cur>1?"s":"")+" · best "+S.streak.best : "not started")+
+    " · "+weekActive()+" of 7 this week";
   drawStreak();
-  renderSkillStrip(sp);
+  renderSkillStrip();
 }
-// three segments under the level bar, so a skill sitting at zero is impossible to miss
-function renderSkillStrip(sp){
-  [ "skillStrip", "skillStrip2" ].forEach(function(id){ paintSkills(id, sp); });
+/* What he keeps, by direction, on the words he has met, against the 90
+   percent the scheduler aims for. The old bars divided by all 1,812 words and
+   read 3 percent whatever happened, which said nothing. */
+function dirRetention(dir, days){
+  var cut=Date.now()/1000-(days||30)*86400, want=dir==="j"?0:(dir==="e"?1:2), ok=0, n=0;
+  for(var i=0;i<S.log.length;i++){ var r=S.log[i];
+    if(r[0]<cut || r[2]!==want || r[5]!==1 || !(r[4]>=1)) continue;
+    n++; if(r[3]>1) ok++; }
+  return {n:n, ok:ok, pct:n?ok/n:null};
+}
+function renderSkillStrip(){
+  var target=Math.round((S.settings.retention||0.9)*100);
+  var dims=[{k:"j",label:"Reading",cls:"sk-j"},{k:"e",label:"Saying",cls:"sk-e"},{k:"a",label:"Hearing",cls:"sk-a"}];
+  if(S.settings.reverse==="off") dims=dims.filter(function(d){ return d.k!=="e"; });
+  if(!listenOn()) dims=dims.filter(function(d){ return d.k!=="a"; });
+  var worst=null;
+  var html=dims.map(function(d){
+    var r=dirRetention(d.k,30), v=r.pct;
+    if(v!==null && r.n>=5 && (!worst || v<worst.v)) worst={label:d.label, v:v, n:r.n};
+    return '<div class="sk '+d.cls+'" title="'+esc(d.label)+'">'+
+      '<div class="sk-lb">'+esc(d.label)+'</div>'+
+      '<div class="sk-bar"><i style="width:'+(v===null?0:Math.max(1,Math.round(v*100)))+'%"></i><b style="left:'+target+'%"></b></div>'+
+      '<div class="sk-pc">'+(v===null||r.n<5?"-":Math.round(v*100)+"%")+'</div></div>';
+  }).join("");
+  ["skillStrip","skillStrip2"].forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML=html; });
   var w=document.getElementById("skillWeak");
   if(w){
-    if(sp.weakest){ w.hidden=false;
-      w.textContent="Weakest skill: "+sp.weakest.label.toLowerCase()+", "+
-        Math.round(sp.weakest.v*100)+" percent. "+sp.weakest.note+".";
+    if(worst && worst.v*100<target-5){ w.hidden=false;
+      w.textContent=worst.label+" is keeping "+Math.round(worst.v*100)+" percent after a day or more, against the "+target+" percent the schedule aims for.";
     } else w.hidden=true;
   }
 }
-function paintSkills(id, sp){
-  var el=document.getElementById(id); if(!el) return;
-  var cls={recog:"sk-j", recall:"sk-e", listen:"sk-a"};
-  var live=sp.dims.filter(function(d){return d.w>0;});
-  el.innerHTML = live.map(function(d){
-    return '<div class="sk '+cls[d.k]+'" title="'+esc(d.label)+'">'+
-      '<div class="sk-lb">'+esc(d.label)+'</div>'+
-      '<div class="sk-bar"><i style="width:'+Math.max(1,Math.round(d.v*100))+'%"></i></div>'+
-      '<div class="sk-pc">'+Math.round(d.v*100)+'%</div></div>';
-  }).join("");
-}
-
 function svgBars(el,vals,labels,color,unit,emptyMsg){
   var W=320,H=+el.getAttribute("viewBox").split(" ")[3],pad=14,bw=W/vals.length;
   var real=Math.max.apply(null,vals), max=Math.max(real,1);
@@ -3919,64 +4767,66 @@ function renderStats(){
   var sp = LAST || scoreParts();
   var sc=Math.round(sp.score), L=levelOf(sc), N=nextLevel(L);
   document.getElementById("pLvlBig").textContent=L.n;
-  document.getElementById("pLvlJa").textContent=L.ja+" · "+L.en;
-  document.getElementById("pLvlDesc").textContent=L.d;
+  document.getElementById("pLvlJa").textContent=levelName(L);
+  /* The level text used to promise things he had not met ("days of the week
+     are becoming yours" with no weekday learned). It now says what is true. */
+  var secs=[]; for(var si=0;si<SECTORS.length;si++){ var g0=sp.sec[si]; if(g0.known>0) secs.push({n:SECTORS[si][0], k:g0.known}); }
+  secs.sort(function(a,b){ return b.k-a.k; });
+  document.getElementById("pLvlDesc").textContent = secs.length
+    ? "Most of what you can read so far: "+secs.slice(0,3).map(function(x){ return x.n.toLowerCase()+" ("+x.k+")"; }).join(", ")+
+      ". Points grow as each word's interval grows, and fall back if it goes overdue."
+    : "Points grow as each word's interval grows, and fall back if it goes overdue.";
   document.getElementById("pLvlOf").textContent="of "+LEVELS.length;
   document.getElementById("pLvlScore").textContent=sc;
-  document.getElementById("pLvlNext").textContent = N ? (N.min-sc)+" pts" : "—";
-  document.getElementById("pRecog").textContent=pct(sp.recog);
-  document.getElementById("pRecall").textContent=pct(sp.recall);
-  document.getElementById("pListen").textContent=pct(sp.listen);
-  if(listenBlocked()){
-    var frozen=0; for(var fk in S.items) if(dirOf(fk)==="a") frozen++;
-    document.getElementById("pListen").textContent="paused";
-    document.getElementById("pListen").title=
-      frozen+" listening card"+(frozen===1?"":"s")+" frozen, no Japanese voice on this device";
-  }
-  document.getElementById("pSent").textContent=sp.sent+" / "+sp.sentTot;
-  document.getElementById("pConj").textContent=sp.conj+" / "+sp.conjTot;
+  document.getElementById("pLvlNext").textContent = N ? (N.min-sc)+" pts" : "-";
+  var rj=dirRetention("j",30), re=dirRetention("e",30), ra=dirRetention("a",30);
+  function rt(r){ return r.pct===null||r.n<5 ? "-" : Math.round(r.pct*100)+"% of "+r.n; }
+  document.getElementById("pRecog").textContent=rt(rj);
+  document.getElementById("pRecall").textContent=rt(re);
+  document.getElementById("pListen").textContent=listenBlocked() ? "paused" : rt(ra);
+  document.getElementById("pSent").textContent=sp.sent;
+  document.getElementById("pConj").textContent=sp.conj+" of "+sp.conjTot;
   var wt=document.getElementById("scoreNote");
-  if(wt) wt.textContent =
-    "The level is a weighted sum over all "+DECK.length+" words: recognition "+Math.round(sp.W.j*100)+
-    " percent, recall in Japanese "+Math.round(sp.W.e*100)+" percent, listening "+Math.round(sp.W.a*100)+
-    " percent"+(listenBlocked()?", which is zero because this device has no Japanese voice":"")+
-    ". Each word counts for more as its interval grows, reaching full value at two months, and drops "+
-    "back if it falls overdue. "+
-    "A skill you never practise holds the level down, by design. Sentences and conjugation are counted "+
-    "separately and do not move it. It measures this deck only: JLPT also tests grammar and kanji.";
-  renderSkillStrip(sp);
-  document.getElementById("lvlAux").textContent=sp.known+" words recognised";
+  if(wt) wt.textContent = "Kept means answered right a day or more after the last review, over the last 30 days. "+
+    "The schedule aims for "+Math.round((S.settings.retention||0.9)*100)+" percent; cards still in their first days sit lower by nature.";
+  renderSkillStrip();
+  document.getElementById("lvlAux").textContent=sp.known+" words you can read";
 
-  var h="";
+  /* words: one ladder, stated in words, and the cards behind it */
+  var mat=0,yng=0,lrn=0,solidW={};
+  for(var k in S.items){ var st=stateOf(S.items[k]); if(st==="mat")mat++; else if(st==="yng")yng++; else lrn++;
+    var wid=k.split("|")[0]; if(st==="mat" && dirOf(k)==="j" && isWordId(wid)) solidW[wid]=1; }
+  var touched=mat+yng+lrn;
+  document.getElementById("progAux").textContent=wordsMet()+" met \u00b7 "+sp.known+" read \u00b7 "+Object.keys(solidW).length+" solid";
+  var rail=document.getElementById("rail").children, tt=Math.max(1,touched);
+  rail[0].style.width=(mat/tt*100)+"%"; rail[1].style.width=(yng/tt*100)+"%"; rail[2].style.width=(lrn/tt*100)+"%";
+  document.getElementById("lgMat").textContent=mat;
+  document.getElementById("lgYng").textContent=yng;
+  document.getElementById("lgLrn").textContent=lrn;
+  document.getElementById("lgNew").textContent=touched;
+  var rn0=document.getElementById("railNote");
+  if(rn0) rn0.textContent="Cards, not words: a word has up to three (reading, saying, hearing). Solid means it holds three weeks or more.";
+
+  var h="", idle=0;
   for(var i=0;i<SECTORS.length;i++){
     var g=sp.sec[i], m=g.n?g.sum/g.n:0, pc=Math.round(m*100);
+    if(!g.known && pc<1){ idle++; continue; }
     var tint=(m*50).toFixed(1);
     h+='<div class="cell" style="background:var(--paper-2);background:color-mix(in srgb, var(--matcha) '+tint+'%, var(--paper-2))">'+
        '<span class="nm">'+esc(SECTORS[i][0])+'</span>'+
        '<span><span class="pc">'+pc+'<small>%</small></span>'+
-       '<span class="ct">'+g.known+' of '+g.n+' recognised</span></span></div>';
+       '<span class="ct">'+g.known+' of '+g.n+' read</span></span></div>';
   }
-  document.getElementById("heat").innerHTML=h;
-  /* The percentage and the count measure different things: the percentage is
-     how strongly the whole area is held, averaged over every word in it, while
-     the count is how many of those words you can already read. Seven percent
-     and 14 of 130 look contradictory until that is said out loud. */
+  document.getElementById("heat").innerHTML=h || '<p class="fine">Nothing started yet.</p>';
+  var ha=document.getElementById("heatAux"); if(ha) ha.textContent=DECK.length.toLocaleString()+" words, "+SECTORS.length+" areas";
   var hn=document.getElementById("heatNote");
-  if(hn) hn.textContent =
-    "The percentage is how strongly the area is held on average across every word in it, "+
-    "counting a word for more as its interval grows. The line under it counts the words you "+
-    "can already read. They are different measures, so they do not match.";
+  if(hn) hn.textContent = (idle ? idle+" area"+(idle>1?"s":"")+" not started yet. " : "")+
+    "The percentage is how strongly the area is held on average; the line under it counts words you can read.";
 
   var avg=function(a){return a.length?a.reduce(function(x,y){return x+y;},0)/a.length:0;};
-  /* "Cards in rotation" has to mean the same thing here as it does under
-     Practice on the study screen: everything the scheduler can still show, in
-     any state, minus what has been set aside. It used to count only cards in
-     review and to include suspended ones, so the two screens disagreed. The
-     interval and difficulty averages stay over review cards, where they mean
-     something, but they drop suspended cards too. */
   var efs=[],ivs=[],mx=0,rot=0;
-  for(var k in S.items){ var it=S.items[k];
-    if(S.susp[k]) continue;
+  for(var k2 in S.items){ var it=S.items[k2];
+    if(S.susp[k2]) continue;
     rot++;
     if(it.s!==1) continue;
     efs.push(it.ef); ivs.push(it.iv); if(it.iv>mx) mx=it.iv; }
@@ -3986,25 +4836,107 @@ function renderStats(){
   if(lab) lab.textContent = fsrs ? "Average difficulty" : "Average ease factor";
   if(fsrs){
     var ds=[]; for(var k3 in S.items){ var i3=S.items[k3]; if(i3.s===1&&i3.sb>0) ds.push(i3.df); }
-    document.getElementById("nEf").textContent = ds.length ? avg(ds).toFixed(1)+" / 10" : "—";
-  } else {
-    document.getElementById("nEf").textContent=efs.length?avg(efs).toFixed(2):"—";
-  }
-  document.getElementById("nIv").textContent=ivs.length?trimz(avg(ivs).toFixed(1))+"d":"—";
+    document.getElementById("nEf").textContent = ds.length ? avg(ds).toFixed(1)+" / 10" : "-";
+  } else document.getElementById("nEf").textContent=efs.length?avg(efs).toFixed(2):"-";
+  document.getElementById("nIv").textContent=ivs.length?trimz(avg(ivs).toFixed(1))+"d":"-";
   document.getElementById("nAns").textContent=S.life.ans;
-  document.getElementById("nAcc").textContent=S.life.ans?Math.round(S.life.ok/S.life.ans*100)+"%":"—";
-  document.getElementById("nMax").textContent=mx?ivLabel(mx*86400000):"—";
+  document.getElementById("nAcc").textContent=S.life.ans?Math.round(S.life.ok/S.life.ans*100)+"%":"-";
+  document.getElementById("nMax").textContent=mx?ivLabel(mx*86400000):"-";
   document.getElementById("nPrac").textContent=S.life.practice||0;
   document.getElementById("nLog").textContent=(Array.isArray(S.log)?S.log.length:0).toLocaleString();
+  var spn=0, spo=0; for(var sk in (S.spoken||{})){ spn+=S.spoken[sk].n||0; spo+=S.spoken[sk].ok||0; }
+  var nsp=document.getElementById("nSpoken"); if(nsp) nsp.textContent = spn ? spo+" of "+spn : "-";
   renderCarNumbers();
   var tr=trueRetention(30), rn=document.getElementById("nRet");
-  if(rn) rn.textContent = tr.pct===null ? "\u2014" : Math.round(tr.pct*100)+"% of "+tr.n;
+  if(rn) rn.textContent = tr.pct===null ? "-" : Math.round(tr.pct*100)+"% of "+tr.n;
   var ta=typedAccuracy(30), tn=document.getElementById("nTyped");
-  if(tn) tn.textContent = ta.pct===null ? "\u2014"
+  if(tn) tn.textContent = ta.pct===null ? "-"
     : Math.round(ta.pct*100)+"% of "+ta.n+(ta.skip? ", "+ta.skip+" skipped":"");
-  document.getElementById("statsSub").textContent="Level "+L.n+" · "+sc+" pts";
+  document.getElementById("statsSub").textContent="Level "+L.n+" \u00b7 "+sc+" pts";
+  drawForecast(); renderTime(); renderLeeches(); renderReady();
 }
-
+/* the next fortnight's reviews, so a heavy day reads as a spike, not a trend */
+function drawForecast(){
+  var el=document.getElementById("foreChart"); if(!el) return;
+  var t0=dayEnd(Date.now())-86400000, vals=[], labs=[];
+  for(var i=0;i<14;i++) vals.push(0);
+  for(var k in S.items){ var it=S.items[k]; if(it.s!==1 || !usable(k)) continue;
+    var dd=Math.floor((it.due-t0)/86400000); if(dd<0) dd=0; if(dd<14) vals[dd]++; }
+  for(var j=0;j<14;j++) labs.push(j===0?"today":(j===13?"+13d":""));
+  svgBars(el, vals, labs, "var(--ohdo)", "", "Nothing due");
+  var fa=document.getElementById("foreAux");
+  if(fa){ var rest=0; for(var q=1;q<14;q++) rest+=vals[q]; fa.textContent="today "+vals[0]+" \u00b7 then about "+Math.round(rest/13)+" a day"; }
+}
+/* minutes actually spent, read from the gaps between answers in the log */
+function renderTime(){
+  var el=document.getElementById("timeNote"); if(!el) return;
+  var cut=Date.now()/1000-14*86400, byDay={}, prev=null;
+  for(var i=0;i<S.log.length;i++){ var r=S.log[i]; if(r[0]<cut){ prev=r[0]; continue; }
+    var dk=dayKey(r[0]*1000); byDay[dk]=byDay[dk]||0;
+    if(prev!==null && r[0]-prev<=180 && r[0]-prev>0) byDay[dk]+=r[0]-prev;
+    prev=r[0]; }
+  var days=Object.keys(byDay), tot=0; days.forEach(function(d){ tot+=byDay[d]; });
+  /* the same fourteen days, today included, for both figures */
+  var today=dayKey(Date.now()), dsx=Array.isArray(S.streak.days)?S.streak.days:[], act=0;
+  for(var j=0;j<14;j++){ var kk=prevKey(today,j); if((S.hist[kk]||0)>0 || dsx.indexOf(kk)>=0 || byDay[kk]) act++; }
+  el.textContent = days.length ? "Last 14 days: studied on "+act+" of them, about "+Math.max(1,Math.round(tot/60/Math.max(1,days.length)))+
+    " min a day on those days, plus "+Math.round((S.life.carSec||0)/60)+" min in the car overall." : "";
+}
+/* the cards failing most, sentences included, one tap from their sheet */
+function renderLeeches(){
+  var host=document.getElementById("leechList"); if(!host) return;
+  var rows=[];
+  for(var k in S.items){ var it=S.items[k]; if(!it.lapses || it.lapses<2) continue; var c=cardOf(k); if(!c) continue;
+    rows.push({k:k, c:c, l:it.lapses, acc:it.seen?it.ok/it.seen:1}); }
+  rows.sort(function(a,b){ return b.l-a.l || a.acc-b.acc; });
+  var la=document.getElementById("leechAux"); if(la) la.textContent=rows.length ? rows.length+" missed twice or more" : "";
+  var d2={j:"reading",e:"saying",a:"hearing"};
+  host.innerHTML = rows.slice(0,8).map(function(r){
+    return '<button class="row" data-id="'+esc(r.c.id)+'"><span><span class="rm">'+esc(r.c.romaji)+'</span>'+
+      '<span class="en">'+esc(glossParts(r.c.en).core)+'</span></span>'+
+      '<span class="state s-lrn">'+d2[dirOf(r.k)]+' \u00b7 '+r.l+'</span></button>';
+  }).join("") || '<p class="fine">Nothing has been missed twice.</p>';
+  Array.prototype.forEach.call(host.querySelectorAll(".row"),function(b){
+    b.addEventListener("click",function(){ openSheet(b.dataset.id); });
+  });
+}
+/* Ready for Japan: the trip, the scenes, and the three things that must be
+   true of the phone before it goes offline in another country. */
+function renderReady(){
+  var t=document.getElementById("readyTrip"); if(!t) return;
+  var pj=tripProjection();
+  t.textContent = pj ? pj.d+" days to go. "+pj.met+" words met, about "+pj.mid+" by the trip ("+pj.lo+" to "+pj.hi+")."
+                     : "Set your trip date in Settings.";
+  var ra=document.getElementById("readyAux");
+  var list=document.getElementById("readyList");
+  var items=[];
+  var bd=backupDays();
+  items.push({ok: bd!==null && bd<7, t: bd===null ? "No backup yet" : "Backup "+(bd===0?"made today":bd+" day"+(bd===1?"":"s")+" old")});
+  var done=0;
+  function paint(){
+    list.innerHTML=items.map(function(x){ return '<div class="rdy '+(x.ok?"ok":"no")+'"><i></i>'+esc(x.t)+'</div>'; }).join("");
+    if(ra){ var n=items.filter(function(x){return x.ok;}).length; ra.textContent=n+" of "+items.length+" ready"; }
+  }
+  paint();
+  if(navigator.storage && navigator.storage.persisted){
+    navigator.storage.persisted().then(function(ok){ items.push({ok:ok, t: ok ? "Storage kept by iOS" : "Storage not yet marked as kept (open from the Home Screen icon)"}); paint(); },function(){});
+  }
+  if(audOn() && AUD.man){
+    audBytesCached().then(function(b){
+      var pc=b.total? Math.floor(b.have/b.total*100) : 0;
+      items.push({ok: pc>=100, t: "Voice downloaded for offline use: "+pc+"%"}); paint();
+    });
+  } else if(!audOn()) { items.push({ok:false, t:"Downloaded voice is off"}); paint(); }
+  else { items.push({ok:false, t:"Voice not verified: the voice files could not be reached"}); paint(); }
+  var host=document.getElementById("sceneReadyList");
+  if(host && typeof SCENES!=="undefined"){
+    host.innerHTML='<div class="sec-h" style="margin-top:14px"><h2>Scenes</h2></div>'+SCENES.map(function(sc){
+      var open=0; for(var i=0;i<sc.lines.length;i++){ var x=sceneLine(sc.lines[i]); if(x && sentOpen(x)) open++; }
+      var r=sceneReady(sc);
+      return '<div class="scr '+(r?"ok":"")+'"><span>'+esc(sc.title)+'</span><b>'+(r?"ready":open+" of "+sc.lines.length+" lines")+'</b></div>';
+    }).join("");
+  }
+}
 /* ---------- browse ---------- */
 function renderBrowse(){
   var q=document.getElementById("q").value.trim().toLowerCase();
@@ -4013,15 +4945,25 @@ function renderBrowse(){
           : (f==="s1") ? DECK.filter(function(c){return (c.stage||1)===1;})
           : (f==="s2") ? DECK.filter(function(c){return c.stage===2;})
           : DECK;
+  /* The hardest filter looked only at word reading cards, so the sentences
+     failing most never showed up in it. It takes the worst direction of
+     anything, sentences included. */
+  if(f==="hard") src=DECK.concat(SENT);
   var out=[], nq=normRomaji(q);
+  function formHit(c){
+    var row=FORMS[c.id]; if(!row || !nq) return false;
+    for(var z=0;z+2<row.length;z+=3) if(normRomaji(row[z+2]).indexOf(nq)>=0) return true;
+    return false;
+  }
+  function worstLapses(id){ var m=0; ["j","e","a"].forEach(function(d){ var x=S.items[id+"|"+d]; if(x && x.lapses>m) m=x.lapses; }); return m; }
   for(var i=0;i<src.length && out.length<200;i++){
     var c=src[i];
     if(q){ var hit = c.kana.indexOf(q)>=0 || (c.kanji||"").indexOf(q)>=0 ||
-      (nq && normRomaji(c.romaji).indexOf(nq)>=0) || c.en.toLowerCase().indexOf(q)>=0;
+      (nq && normRomaji(c.romaji).indexOf(nq)>=0) || c.en.toLowerCase().indexOf(q)>=0 || formHit(c);
       if(!hit) continue; }
     var it=S.items[c.id+"|j"], st=stateOf(it), susp=!!S.susp[c.id+"|j"];
     if(f!=="all" && f!=="sent" && f!=="s1" && f!=="s2"){
-      if(f==="hard"){ if(!it || it.lapses<3) continue; }
+      if(f==="hard"){ if(worstLapses(c.id)<3) continue; }
       else if(f==="susp"){ if(!susp) continue; }
       else if(f!==st) continue;
     }
@@ -4036,8 +4978,11 @@ function renderBrowse(){
       '</span><span class="rm"> '+esc(o.c.romaji)+'</span><span class="en">'+esc(o.c.en)+'</span></span>'+
       '<span class="state s-'+(o.susp?"susp":o.st)+'">'+lab+'</span></button>';
   }
-  document.getElementById("rows").innerHTML = h || '<div class="empty"><div class="big">無</div>Nothing matches that.</div>';
-  document.getElementById("browseCount").textContent = DECK.length+" words · "+SENT.length+" sentences";
+  document.getElementById("rows").innerHTML = h || '<div class="empty">Nothing matches that.</div>';
+  document.getElementById("browseCount").textContent = DECK.length.toLocaleString()+" words · "+SENT.length.toLocaleString()+" sentences";
+  var o1=document.getElementById("optS1"), o2=document.getElementById("optS2");
+  if(o1 && !o1._set){ o1._set=1; var n1=DECK.filter(function(c){return (c.stage||1)===1;}).length;
+    o1.textContent="Stage 1 (first "+n1.toLocaleString()+")"; o2.textContent="Stage 2 (next "+(DECK.length-n1).toLocaleString()+")"; }
   document.getElementById("browseNote").textContent = out.length>=200 ? "Showing the first 200 matches. Narrow the search to see more." : (out.length+" shown");
   Array.prototype.forEach.call(document.querySelectorAll("#rows .row"),function(b){
     b.addEventListener("click",function(){ openSheet(b.dataset.id); });
@@ -4131,7 +5076,7 @@ function sentBlock(id, c){
   if(list.length>4) h+='<p class="fine">and '+(list.length-4)+' more</p>';
   return h+'</div>';
 }
-function closeSheet(){ SHEET=null; document.getElementById("sheet").hidden=true; }
+function closeSheet(){ SHEET=null; document.getElementById("sheet").hidden=true; setTimeout(applyPendingUpdate,0); }
 
 /* ---------- settings ---------- */
 function applySettings(){
@@ -4177,6 +5122,9 @@ function applySettings(){
   document.getElementById("setTheme").value=S.settings.theme;
   document.getElementById("setSched").value=S.settings.sched||"fsrs";
   document.getElementById("setRet").value=Math.round((S.settings.retention||0.9)*100);
+  var ss=document.getElementById("setSub"); if(ss) ss.textContent = S.settings.sched==="sm2" ? "SM-2" : "FSRS-6";
+  var spa=document.getElementById("setSpAudio"); if(spa) spa.setAttribute("aria-checked",String(S.settings.spAudio===true));
+  var srm=document.getElementById("setRemind"); if(srm) srm.value=S.settings.remindAt||"19:00";
   renderSchedNote();
   if(S.settings.theme==="auto") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme",S.settings.theme);
@@ -4197,19 +5145,46 @@ function renderAudNote(){
     });
   });
 }
+/* "Voice downloaded" used to appear after eight seconds whatever had arrived:
+   every file went through the drive loader, which gives up at eight seconds so
+   a drive never waits, and never said so. The download control fetches one
+   file at a time with no clock on it, retries once, and reports what it got. */
+function audFetchFull(sprite){
+  var f=audFile(sprite);
+  return Promise.all([
+    audFetch(AUD_BASE+f+".json").then(function(r){ if(!r||!r.ok) throw 0; return r.json(); }),
+    audFetch(AUD_BASE+f+".mp3").then(function(r){ if(!r||!r.ok) throw 0; return r.arrayBuffer(); })
+  ]).then(function(a){ var o={idx:a[0], buf:a[1]}; AUD.loaded[sprite]=o; AUD.want[sprite]=Promise.resolve(o); return true; })
+    .catch(function(){ return false; });
+}
 function audDownload(){
   var btn=document.getElementById("audGet");
   audManifest().then(function(m){
     if(!m){ toast("The voice files are not reachable right now"); return; }
-    var ids=carWords();
-    if(!ids.length){ toast("Nothing met yet"); return; }
-    var list=audAllSprites();
-    if(btn){ btn.disabled=true; btn.textContent="Downloading"; }
-    return Promise.all(list.map(audLoad)).then(function(){
-      if(btn){ btn.disabled=false; btn.textContent="Download"; }
-      renderAudNote();
-      toast("Voice downloaded");
-    });
+    var list=audAllSprites(), i=0, ok=0, bad=[];
+    if(btn){ btn.disabled=true; }
+    function step(){
+      if(i>=list.length){
+        if(btn){ btn.disabled=false; btn.textContent="Download"; }
+        renderAudNote(); renderReady();
+        /* the message is read back from what the phone actually stored, not from
+           how many fetches returned: a full disk used to report success */
+        audBytesCached().then(function(b){
+          var all=b.total>0 && b.have>=b.total;
+          toast(all ? "Voice downloaded and stored, "+mb(b.have)
+            : "Stored "+mb(b.have)+" of "+mb(b.total)+(bad.length ? ". Some files did not arrive: try again on wifi." : ". The phone did not keep them all: free some space and try again."));
+          renderAudNote(); renderReady();
+        });
+        return;
+      }
+      var sp=list[i];
+      if(btn) btn.textContent=(i+1)+" of "+list.length;
+      audFetchFull(sp).then(function(r){ return r ? r : audFetchFull(sp); }).then(function(r){
+        if(r) ok++; else bad.push(sp);
+        i++; step();
+      });
+    }
+    step();
   }).catch(function(){
     if(btn){ btn.disabled=false; btn.textContent="Download"; }
     toast("The download did not finish");
@@ -4367,6 +5342,12 @@ function bindSettings(){
         S.settings[p[1]]=want; this.setAttribute("aria-checked",String(want)); save(); });
     });
   document.getElementById("setTheme").addEventListener("change",function(){S.settings.theme=this.value; applySettings(); save();});
+  var spa=document.getElementById("setSpAudio");
+  if(spa) spa.addEventListener("click",function(){ S.settings.spAudio=!(S.settings.spAudio===true);
+    this.setAttribute("aria-checked",String(S.settings.spAudio)); save(); });
+  var srm=document.getElementById("setRemind");
+  if(srm) srm.addEventListener("change",function(){ if(/^\d{2}:\d{2}$/.test(this.value)){ S.settings.remindAt=this.value; save(); } });
+  var rmb=document.getElementById("remindBtn"); if(rmb) rmb.addEventListener("click",remindIcs);
   document.getElementById("setSched").addEventListener("change",function(){
     S.settings.sched=this.value; save(); render(); renderSchedNote();
     toast(this.value==="fsrs" ? "Switched to FSRS-6" : "Switched to SM-2");
@@ -4393,26 +5374,16 @@ function bindSettings(){
       if(p[1]==="badge"){ if(want) enableBadge(); render(); }
     });
   });
-  document.getElementById("exportBtn").addEventListener("click",function(){
-    var name="kana-ladder-"+dayKey(Date.now())+".json", text=JSON.stringify(packAll());
-    function anchorSave(){
-      try{
-        var a=document.createElement("a");
-        a.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));
-        a.download=name; document.body.appendChild(a); a.click();
-        setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},2000);
-        S.backup={last:dayKey(Date.now())}; save(); storageReport(); render();
-        toast("Backup saved. Choose Save to Files to keep it.");
-      }catch(e){ toast("Could not create the backup file"); }
-    }
-    if(window.claude && typeof window.claude.use==="function"){
-      window.claude.use("downloads").then(function(dl){
-        if(!dl) return anchorSave();
-        return dl.save({filename:name, data:text}).then(
-          function(){ S.backup={last:dayKey(Date.now())}; save(); storageReport(); render(); toast("Backup saved"); },
-          function(err){ toast(err && err.code==="declined" ? "Backup cancelled" : "Backup was not saved"); });
-      }).catch(anchorSave);
-    } else anchorSave();
+  document.getElementById("exportBtn").addEventListener("click",function(){ doBackup(); });
+  var ur=document.getElementById("undoRestore");
+  if(ur) ur.addEventListener("click",function(){
+    var raw=null; try{ raw=localStorage.getItem(LS_KEY+".prev"); }catch(e){}
+    if(!raw){ toast("There is no earlier state to go back to"); return; }
+    if(!confirm("Go back to the schedule you had before the last restore?")) return;
+    try{ var b=JSON.parse(raw); var keepRev=Math.max(S.rev,b.rev||0)+1; applyBlob(b); S.rev=keepRev;
+      saveLocal(); markAll(); remoteQueue(); applySettings(); render(); renderBrowse();
+      try{ localStorage.removeItem(LS_KEY+".prev"); }catch(e2){}
+      toast("Back to the schedule before the restore"); }catch(e){ toast("That earlier state could not be read"); }
   });
   document.getElementById("importBtn").addEventListener("click",function(){ document.getElementById("importFile").click(); });
   document.getElementById("importFile").addEventListener("change",function(){
@@ -4438,9 +5409,96 @@ function bindSettings(){
   });
   document.getElementById("resetBtn").addEventListener("click",function(){
     if(!confirm("Erase all scheduling and start the deck from zero? This cannot be undone.")) return;
-    S.items={}; S.daily={key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,noNew:false,buried:{},done:{},missed:{}}; S.hist={}; S.notes={}; S.susp={}; S.pfail={}; S.log=[]; S.streak={cur:0,best:0,last:""}; S.life={ans:0,ok:0};
+    S.items={}; S.daily={key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,packDone:0,extra:0,carSec:0,prac:0,noNew:false,buried:{},done:{},missed:{}}; S.hist={}; S.notes={}; S.susp={}; S.pfail={}; S.log=[]; S.streak={cur:0,best:0,last:""}; S.life={ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}; S.spoken={}; S.scenes={}; S.want=[]; S.crep={}; S.checks=[];
     markAll(); save(); render(); renderBrowse(); toast("Deck reset");
   });
+}
+
+/* ---------- updates, deferred ---------- */
+var UPDATE_PENDING=false;
+/* Busy also while a result is on screen: reloading the moment a session,
+   drive or check ended wiped its summary before it could be read. The update
+   lands on the next return to Study, or when the app goes to the background. */
+function busyNow(){
+  if(Sess.on || CAR.running || CHK.on || (SC && SC.mode) || (SP && SP.running)) return true;
+  var sh=document.getElementById("sheet"); if(SHEET || (sh && !sh.hidden)) return true;
+  var on=document.querySelector(".screen.on");
+  return !!(on && /^s-(review|car|check|scenes|speak)$/.test(on.id));
+}
+function applyPendingUpdate(){
+  if(!UPDATE_PENDING || busyNow()) return;
+  UPDATE_PENDING=false; saveLocal();
+  try{ location.reload(); }catch(e){}
+}
+
+/* ---------- backup ---------- */
+function backupDays(){
+  if(!S.backup||!S.backup.last) return null;
+  return daysBetween(S.backup.last,dayKey(Date.now()));
+}
+/* The file used to be packed before the date was stamped, so every backup
+   said it was made on the previous backup's date. The date is stamped first
+   now, and only kept once the file has actually gone somewhere. On a phone
+   the share sheet is the way to Files or iCloud Drive in one tap. */
+function doBackup(){
+  var name="kana-ladder-"+dayKey(Date.now())+".json";
+  var prev=S.backup;
+  S.backup={last:dayKey(Date.now())};
+  var text=JSON.stringify(packAll());
+  function kept(msg){ save(); storageReport(); render(); toast(msg); }
+  function failed(msg){ S.backup=prev; if(msg) toast(msg); }
+  function anchorSave(){
+    try{
+      var a=document.createElement("a");
+      a.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));
+      a.download=name; document.body.appendChild(a); a.click();
+      setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},2000);
+      kept("Backup saved. Choose Save to Files to keep it.");
+    }catch(e){ failed("Could not create the backup file"); }
+  }
+  if(window.claude && typeof window.claude.use==="function"){
+    window.claude.use("downloads").then(function(dl){
+      if(!dl) return anchorSave();
+      return dl.save({filename:name, data:text}).then(
+        function(){ kept("Backup saved"); },
+        function(err){ failed(err && err.code==="declined" ? "Backup cancelled" : "Backup was not saved"); });
+    }).catch(anchorSave);
+    return;
+  }
+  try{
+    var file=new File([text], name, {type:"application/json"});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      navigator.share({files:[file], title:"Kana Ladder backup"}).then(
+        function(){ kept("Backup saved"); },
+        function(err){ if(err && err.name==="AbortError") failed("Backup cancelled"); else anchorSave(); });
+      return;
+    }
+  }catch(e){}
+  anchorSave();
+}
+
+/* A web app on a static host cannot send its own reminder, but the phone's
+   calendar can: a daily repeating event with an alert, which opens straight
+   into the Add screen. */
+function remindIcs(){
+  var t=(S.settings.remindAt||"19:00").split(":"), d=new Date();
+  function p2(n){ return ("0"+n).slice(-2); }
+  var day=d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate());
+  var st=day+"T"+p2(+t[0])+p2(+t[1])+"00";
+  var en=day+"T"+p2(+t[0])+p2(Math.min(59,(+t[1])+15))+"00";
+  var ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Kana Ladder//EN","BEGIN:VEVENT",
+    "UID:kana-ladder-daily@local","DTSTAMP:"+new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,""),"DTSTART:"+st,"DTEND:"+en,
+    "RRULE:FREQ=DAILY","SUMMARY:Kana Ladder, one round",
+    "DESCRIPTION:Open Kana Ladder from the Home Screen and clear today's cards.",
+    "BEGIN:VALARM","TRIGGER:PT0M","ACTION:DISPLAY","DESCRIPTION:Kana Ladder","END:VALARM",
+    "END:VEVENT","END:VCALENDAR"].join("\r\n");
+  var name="kana-ladder-reminder.ics";
+  try{
+    var file=new File([ics], name, {type:"text/calendar"});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){ navigator.share({files:[file]}).catch(function(){}); return; }
+  }catch(e){}
+  var a=document.createElement("a"); a.href="data:text/calendar;charset=utf-8,"+encodeURIComponent(ics); a.download=name;
+  document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); },1000);
 }
 
 /* ---------- home screen badge ---------- */
@@ -4478,9 +5536,14 @@ function backupLabel(){
   var d=daysBetween(S.backup.last,dayKey(Date.now()));
   return d<=0?"today":(d===1?"yesterday":d+" days ago");
 }
+/* Thirty days was the threshold for the warning, on a phone that holds the
+   only copy of his progress. It is a week now, and the three days before the
+   trip ask for a fresh one whatever its age. */
 function backupStale(){
-  if(!S.backup||!S.backup.last) return S.life.ans>200;
-  return daysBetween(S.backup.last,dayKey(Date.now()))>30;
+  if(!S.backup||!S.backup.last) return S.life.ans>50;
+  var d=daysBetween(S.backup.last,dayKey(Date.now())), t=tripDays();
+  if(t!==null && t>=0 && t<=3 && d>=1) return true;
+  return d>=7;
 }
 function storageReport(){
   var el=document.getElementById("stMode"); if(!el) return;
@@ -4521,6 +5584,7 @@ function go(name){
   if(name==="stats") renderCheckPanel();
   if(name==="home"||name==="stats") render();
   if(name==="set"){ applySettings(); storageReport(); }
+  if(name==="home") setTimeout(applyPendingUpdate,0);
 }
 var toastTimer=null;
 function toast(msg){
@@ -4532,7 +5596,18 @@ function bind(){
   Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){
     t.addEventListener("click",function(){ if(Sess.on) return; go(t.dataset.go); });
   });
-  document.getElementById("startBtn").addEventListener("click",function(){ startSession(this.dataset.mode||"today"); });
+  document.getElementById("startBtn").addEventListener("click",function(){
+    var m=this.dataset.mode||"today";
+    if(m==="more"){ rollDay(); S.daily.extra=(S.daily.extra||0)+3; save(); startSession("today"); return; }
+    startSession(m); });
+  var cdb=document.getElementById("checkDueBtn");
+  if(cdb) cdb.addEventListener("click",function(){ startCheck(); });
+  var qs=document.getElementById("queueScenes");
+  if(qs) qs.addEventListener("click",function(){
+    var ids=allSceneWords(); S.want=S.want||[];
+    ids.forEach(function(id){ if(S.want.indexOf(id)<0) S.want.push(id); });
+    save(); render(); toast(ids.length+" scene word"+(ids.length===1?"":"s")+" moved to the front of your new words");
+  });
   document.getElementById("aheadBtn").addEventListener("click",function(){ startSession("ahead"); });
   document.getElementById("focusBtn").addEventListener("click",function(){ startFocus(); });
   document.getElementById("noNewSw").addEventListener("click",function(){
@@ -4542,8 +5617,13 @@ function bind(){
     save(); render();
   });
   document.getElementById("undoBtn").addEventListener("click",undoLast);
+  /* one tap next to undo used to end the session: with cards still left it now
+     asks first (a finished or practice session still ends at once) */
   document.getElementById("quitBtn").addEventListener("click",function(){
-    if(Sess.practice){ endPractice(); return; } endSession(Sess.done?Sess.done+" answered this session":""); });
+    if(Sess.practice){ endPractice(); return; }
+    var left=Sess.mode==="ahead" ? 0 : cardsLeft();
+    if(Sess.done>0 && left>0){ confirmQuit(left); return; }
+    endSession(""); });
   document.getElementById("q").addEventListener("input",renderBrowse);
   document.getElementById("filt").addEventListener("change",renderBrowse);
   document.getElementById("faceFront").addEventListener("click",function(e){
@@ -4599,15 +5679,32 @@ if("serviceWorker" in navigator){
       reservedFor:reservedFor, checkDue:checkDue, endCheck:endCheck,
       pickNext:pickNext, startSession:startSession, dayEnd:dayEnd, rollDay:rollDay,
       carClock:function(n){ CAR_CLK=(typeof n==='number'&&n>0)?n:1; return CAR_CLK; }, carEl:carEl,
-      sess:function(){return Sess;}};
+      sess:function(){return Sess;},
+      cleanEn:cleanEn, sayEn:sayEn, glossParts:glossParts, posLabel:posLabel, noReverse:noReverse, patternHeld:patternHeld, patternFrame:patternFrame,
+      alsoRight:alsoRight, answerMatches:answerMatches, held:held, usable:usable, isFuncWord:isFuncWord, askedBy:askedBy, isSceneLine:isSceneLine,
+      budgets:budgets, fsrsOutcomes:fsrsOutcomes, scheduleGraded:scheduleGraded, wordsMet:wordsMet, tripProjection:tripProjection,
+      dirRetention:dirRetention, holdRecent:holdRecent, keyOfLogRow:keyOfLogRow, markActive:markActive, weekActive:weekActive,
+      weakSentences:weakSentences, pairsFor:pairsFor, PAIRS:PAIRS, orderTask:orderTask, orderChunks:orderChunks,
+      busyNow:busyNow, applyPendingUpdate:applyPendingUpdate, setUpdatePending:function(v){ UPDATE_PENDING=!!v; }, getUpdatePending:function(){ return UPDATE_PENDING; },
+      doBackup:doBackup, backupStale:backupStale, backupDays:backupDays, cardsLeft:cardsLeft, nextCard:nextCard, endSession:endSession,
+      checkReady:checkReady, checkNeed:checkNeed, sceneCheckPool:sceneCheckPool, sceneNeed:sceneNeed, allSceneWords:allSceneWords,
+      tomorrowDue:tomorrowDue, isBuried:isBuried, readableExample:readableExample,
+      sceneNeedIds:sceneNeedIds, closeSheet:closeSheet, LOG_CAP:LOG_CAP,
+      recordSpoken:recordSpoken, verdictPct:verdictPct, voiceCmd:voiceCmd, CONT:CONT, FORM_LABEL:FORM_LABEL, remindIcs:remindIcs,
+      carSaveProgress:carSaveProgress, renderReady:renderReady, renderStats:renderStats, undoLast:undoLast, reveal:reveal};
   }
   window.addEventListener("load",function(){
     var hadController = !!navigator.serviceWorker.controller, reloaded=false;
     navigator.serviceWorker.register("sw.js").catch(function(){});
     navigator.serviceWorker.addEventListener("controllerchange",function(){
-      // a newer build just took over: save, then pick it up straight away
+      /* A newer build took over. Reloading straight away killed a drive or a
+         session in the middle: the car went silent until the phone was
+         touched. It now waits for whatever is running to finish. */
       if(reloaded || !hadController) return;
-      reloaded=true; saveLocal(); location.reload();
+      UPDATE_PENDING=true; applyPendingUpdate();
+    });
+    document.addEventListener("visibilitychange",function(){
+      if(document.visibilityState==="hidden") applyPendingUpdate();
     });
   });
 }

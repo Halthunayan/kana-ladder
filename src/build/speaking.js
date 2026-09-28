@@ -10,7 +10,7 @@
    aloud, since he reads it himself; the pause before the mic opens just
    holds for as long as reading it would take. Say the answer: right turns
    that ticket green, grades 100%, and moves on. Wrong turns it red, grades
-   70% or 50% by how close it was, and asks the same word again - up to
+   70% or 0% by how close it was, and asks the same word again - up to
    three tries total. A third wrong try reveals the answer and holds for a
    few seconds before moving on. Stuck on one word: Show answer or Skip
    move past it unscored. Tapping any ticket that has been asked shows
@@ -25,13 +25,15 @@ var SP_PASS_JA=0.62, SP_PASS_EN=0.6;
    bars. MAX_TRIES and REVEAL_MS are shared with Scenes, declared there. */
 var SP_CLOSE_JA=0.42, SP_CLOSE_EN=0.4;
 var SP={ids:[], dir:{}, state:{}, cur:-1, gen:0, running:false, mic:"untried",
-  tries:{}, heard:{}, grade:{}, verdict:{}, reason:{}};
+  tries:{}, heard:{}, grade:{}, verdict:{}, reason:{}, locked:{}};
 
 function spCard(id){ return IDX[id]; }
 /* the same weak-word pool Focus draws its round from, so "the words in
    Focus" means the same twelve words either mode would open with right now */
 function speakingWords(){
   var weak=weakWords();
+  var okW=function(id){ var c=IDX[id]; return c && c.t==="w" && !patternHeld(c); };
+  weak=weak.filter(function(w){ return okW(w.id); });
   if(weak.length) return shuffle(weak.slice(0, SP_WORDS)).map(function(w){ return w.id; });
   /* nothing is going badly: fall back to a mixed draw over what has been met,
      the same fallback startFocus uses, so speaking never dead ends either */
@@ -43,47 +45,101 @@ function speakingWords(){
     // not tell them apart. Speaking is a word drill, so only "w" qualifies:
     // anything else was a full sentence sitting in a single tile, breaking
     // both the layout and the word-level grading thresholds.
-    if(seen[id] || !IDX[id] || IDX[id].t!=="w") continue;
+    if(seen[id] || !okW(id)) continue;
     seen[id]=1; out.push(id);
   }
   return out;
 }
 
-/* ---- grading the English half: normalise, split the gloss's alternatives
-   on "/", and let the same edit-distance similarity that grades Japanese
-   grade this too; a Levenshtein ratio does not care what alphabet it is
-   given. "to eat" and "eat" are treated as the same answer. */
+/* ---- grading the English half ----
+   The gloss is cleaned first (notes and the tilde off) and split on every
+   separator it uses, "/", ";" and ",": splitting on "/" alone made "until"
+   fail against "until, as far as" and "must" against "must ~, have to ~".
+   Then a few words that carry the whole meaning have to be there: "good
+   morning" used to pass for "good evening", and "that one" for "this one". */
+var EN_NUM=["zero","one","two","three","four","five","six","seven","eight","nine","ten",
+  "eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
+var EN_TENS=["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"];
+/* digits the recogniser writes ("100", "1,000") read as the words in the gloss */
+function enNumWords(n){
+  if(n<20) return EN_NUM[n];
+  if(n<100) return EN_TENS[Math.floor(n/10)]+(n%10?" "+EN_NUM[n%10]:"");
+  if(n<1000) return EN_NUM[Math.floor(n/100)]+" hundred"+(n%100?" "+enNumWords(n%100):"");
+  if(n<100000) return enNumWords(Math.floor(n/1000))+" thousand"+(n%1000?" "+enNumWords(n%1000):"");
+  return String(n);
+}
+/* "don't" has to meet the "not" the gloss is keyed on: "I understand" passed
+   for "I don't understand" because the two never compared as words */
 function enNorm(s){
-  return String(s||"").toLowerCase().replace(/\([^)]*\)/g,"")
-    .replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim();
+  return String(s||"").toLowerCase().replace(/[\u2018\u2019]/g,"'").replace(/\([^)]*\)/g,"").replace(/~/g," ")
+    .replace(/\bwon't\b/g,"will not").replace(/\bcan't\b/g,"can not").replace(/\bcannot\b/g,"can not")
+    .replace(/n't\b/g," not")
+    .replace(/(\d),(\d{3})\b/g,"$1$2")
+    .replace(/[^a-z0-9' ]+/g," ").replace(/\b\d{1,5}\b/g,function(m){ return enNumWords(+m); })
+    .replace(/\ba (hundred|thousand)\b/g,"one $1")
+    .replace(/\s+/g," ").trim();
 }
 function enBare(s){ return s.replace(/^(to|a|an|the)\s+/,""); }
+/* the alternatives a right answer can match: notes, brackets and a trailing
+   register word (", polite", "; said by staff") are not answers, so saying
+   "polite" no longer passes; "(not) any more" keeps its "not" */
+var EN_QUAL={"polite":1,"said by staff":1,"used by staff":1,"everyday":1,"casual":1,"formal":1,"humble":1,"honorific":1};
 function enAlts(en){
+  var t=String(en||"").replace(/～/g,"~").replace(/\(\s*not\s*\)/g,"not").replace(/\[[^\]]*\]/g," ").replace(/\([^)]*\)/g," ");
+  var parts=t.split(/[\/;,]/).map(function(x){ return x.trim(); }).filter(Boolean);
+  while(parts.length>1 && EN_QUAL[parts[parts.length-1].toLowerCase().replace(/[ .]+$/,"")]) parts.pop();
   var out=[];
-  String(en||"").split("/").forEach(function(part){
+  parts.forEach(function(part){
     var n=enNorm(part); if(!n) return;
     out.push(n); var b=enBare(n); if(b!==n) out.push(b);
   });
   return out.length ? out : [enNorm(en)];
 }
+var EN_KEY={"this":1,"that":1,"these":1,"those":1,"here":1,"there":1,"morning":1,"afternoon":1,"evening":1,"night":1,
+  "yes":1,"no":1,"not":1,"left":1,"right":1,"up":1,"down":1,"before":1,"after":1,"yesterday":1,"today":1,"tomorrow":1,
+  "one":1,"two":1,"three":1,"four":1,"five":1,"six":1,"seven":1,"eight":1,"nine":1,"ten":1,"hundred":1,"thousand":1,
+  "come":1,"go":1,"buy":1,"sell":1,"open":1,"close":1,"hot":1,"cold":1,"big":1,"small":1,"understand":1};
+var EN_NEG=/^(in|un|im|non|dis|il|ir)/;
+function enKeyOk(cand, heard){
+  var h={}, hs=heard.split(" "); hs.forEach(function(w){ h[w]=1; });
+  var ws=cand.split(" "), cw={}; ws.forEach(function(w){ cw[w]=1; });
+  for(var i=0;i<ws.length;i++) if(EN_KEY[ws[i]] && !h[ws[i]]) return false;
+  // the reverse: a "not" or "no" he added turns a right answer into its opposite
+  if((h["not"] && !cw["not"]) || (h["no"] && !cw["no"] && !cw["not"])) return false;
+  // one side negated by a prefix: "expensive" is not "inexpensive"
+  function neg(a, b){ for(var j=0;j<a.length;j++){ var m=a[j].match(EN_NEG);
+    if(m && a[j].length-m[0].length>=4){ var rest=a[j].slice(m[0].length); if(b[rest] && !b[a[j]]) return true; } } return false; }
+  if(neg(ws, h) || neg(hs, cw)) return false;
+  return true;
+}
 function enGrade(target, alts){
-  var cands=enAlts(target), best={sim:-1, heard:alts[0]||""};
+  var cands=enAlts(target), best={sim:-1, heard:alts[0]||"", keyOk:true};
   for(var i=0;i<alts.length;i++){
     var h=enNorm(alts[i]), hb=enBare(h);
     for(var j=0;j<cands.length;j++){
       var s=Math.max(kanaSim(cands[j], h), kanaSim(cands[j], hb));
-      if(s>best.sim) best={sim:s, heard:alts[i]};
+      var ok=enKeyOk(cands[j], h);
+      if(!ok) s=Math.min(s, SP_PASS_EN-0.01);
+      if(s>best.sim) best={sim:s, heard:alts[i], keyOk:ok};
     }
   }
   return best;
 }
 /* the Japanese half reuses the scene grader's own math, at a lower bar: one
    wrong mora in a two mora word is a much bigger hit than in a full sentence,
-   so a word that would grade "close" in a scene counts as right here */
+   so a word that would grade "close" in a scene counts as right here. Two
+   limits: a word of four kana or fewer has to be heard exactly (juu, ten, and
+   kyuu, nine, differ by one sound and used to pass for each other), and a
+   polite ending has to be the right one (wakarimasen, I don't understand,
+   passed for wakarimashita, understood). */
+var JA_END=["ませんでした","ました","ません","ます","ましょう","たいです","です"];
+function jaEnding(k){ for(var i=0;i<JA_END.length;i++) if(k.slice(-JA_END[i].length)===JA_END[i]) return JA_END[i]; return ""; }
 function spGradeJa(targetKana, alts){
   var want=kanaKey(targetKana), best={sim:-1, heard:alts[0]||""};
   for(var i=0;i<alts.length;i++){
-    var s=kanaSim(want, kanaKey(alts[i]));
+    var got=kanaKey(alts[i]), s=kanaSim(want, got);
+    if(want.length<=4 && got!==want) s=Math.min(s, SP_PASS_JA-0.01);
+    var we=jaEnding(want); if(we && jaEnding(got)!==we) s=Math.min(s, SP_PASS_JA-0.01);
     if(s>best.sim) best={sim:s, heard:alts[i]};
   }
   best.romaji=kanaToRomaji(kanjiToKana(best.heard));
@@ -134,7 +190,7 @@ function spHistRow(i){
     SP.reason[i]==="shown" ? "Shown" :
     SP.reason[i]==="no-mic" ? "No microphone" :
     (SP.heard[i] ? SP.heard[i] : "Nothing heard");
-  var pct=SP.grade[i], gradeTxt = pct!=null ? pct+"%" : "—";
+  var pct=SP.grade[i], gradeTxt = pct!=null ? pct+"%" : "-";
   return '<div class="scres '+historyColor(verdict, SP.tries[i]||0)+'">'+
     '<div class="scres-q"><span class="lbl">'+(dir==="j"?"Say in English":"Say in Japanese")+'</span><b>'+esc(q)+'</b></div>'+
     '<div class="scres-a"><span class="lbl">Correct</span><b>'+esc(correct)+'</b></div>'+
@@ -168,30 +224,36 @@ function spListening(){
   var st=document.getElementById("spState");
   st.textContent="listening"; st.className="spstate prompt";
 }
+/* With audio prompts on, the prompt and the answer are spoken, so a round
+   can be done without looking: the Japanese clip for a Japanese prompt, the
+   English clip (read without its notes) for an English one. The mic is muted
+   while they play. */
+function spAudioOn(){ return S.settings.spAudio===true && audOn(); }
+function spPlay(key, gen){
+  if(!spAudioOn()) return Promise.resolve();
+  return audioGate(audPlayWA(key, function(){ return gen===SP.gen; })).then(function(){});
+}
+function spPromptKey(id, dir){ return dir==="j" ? "wj:"+id : "we:"+id; }
+function spAnswerKey(id, dir){ return dir==="j" ? "we:"+id : "wj:"+id; }
 /* one word of the round: show it, listen, grade, then move on or retry */
 function spAsk(i){
   if(!SP.running) return;
   if(i>=SP.ids.length){ spFinish(); return; }
-  SP.cur=i;
+  /* held shut until the prompt has been read: the answer to the previous word,
+     said during its reveal, used to land here as try one of this word */
+  SP.cur=i; SP.locked[i]=true;
   var id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
   var gen=++SP.gen;
   spRenderTiles();
   spStageShow(c, dir);
   var lang = dir==="j" ? "en-US" : "ja-JP";
-  // words are grouped by direction (see speakingStart), so the mic only
-  // needs to reopen at a language boundary - everywhere else within the
-  // same block, the session already running keeps listening straight
-  // through into this word
   var freshBlock = (i===0) || (SP.dir[SP.ids[i-1]]!==dir);
-  // neither direction speaks the prompt aloud - he reads the kana/romaji
-  // or the English gloss on screen himself; this just holds for as long
-  // as reading it would take before the mic opens
-  var pre = dir==="j" ? wait(estSpeechMs(c.kana))
-                      : wait(500+Math.min(1300, String(c.en||"").length*16));
+  var pre = spAudioOn() ? spPlay(spPromptKey(id,dir), gen)
+          : (dir==="j" ? wait(estSpeechMs(c.kana)) : wait(500+Math.min(1300, String(c.en||"").length*16)));
   pre.then(function(){
     if(gen!==SP.gen) return;
+    SP.locked[i]=false;
     if(!recAvailable()){
-      // no grading is possible here: show the answer and move on, unscored
       SP.mic="unavailable";
       SP.verdict[i]="none"; SP.reason[i]="no-mic"; SP.heard[i]=""; SP.grade[i]=null;
       document.getElementById("spState").textContent="No microphone here";
@@ -200,148 +262,128 @@ function spAsk(i){
       setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, 1400);
       return;
     }
+    if(SP.mic==="blocked"){ spBlocked(); return; }
     spListening();
-    if(freshBlock || SP._contLang!==lang){
+    if(freshBlock || SP._contLang!==lang || !CONT.running){
       SP._contLang=lang;
-      contListenStart(lang, spOnHeard, "spState", function(){
-        SP.mic="blocked";
-        document.getElementById("spState").textContent="Microphone blocked. Allow it, then tap to try again.";
-        document.getElementById("spMicBtn").hidden=false;
-        SP._contLang=null;
-      });
+      contListenStart(lang, spOnHeard, "spState", function(){ SP.mic="blocked"; SP._contLang=null; spBlocked(); });
     }
-    // else: the continuous session opened for an earlier word in this same
-    // language block is still listening; nothing more to start here
-
-    // continuous mode never gives up on its own - it just waits, however
-    // long that takes - but total silence for a while is worth a hint,
-    // since Show answer / Skip are the way past a word it genuinely is
-    // not hearing
     setTimeout(function(){
-      if(gen===SP.gen && SP.cur===i) document.getElementById("spState").textContent="Still not hearing you. Say it again, or tap Show answer / Skip.";
+      if(gen===SP.gen && SP.cur===i && SP.mic!=="blocked" && !SP.locked[i])
+        document.getElementById("spState").textContent="Still not hearing you. Say it again, or tap Show answer / Skip.";
     }, SP_LISTEN_MS);
   });
 }
-/* Grades whatever the continuous mic just heard against whichever word is
-   current at the moment the result arrives - one session can span several
-   words in the same language block, so "current" has to be read live
-   rather than captured back when that session was opened.
-
-   Right advances straight away. Wrong gets up to MAX_TRIES total on the
-   same word, the mic already open. The third wrong attempt reveals the
-   answer and holds for REVEAL_MS before moving on, same as Scenes. */
-function spOnHeard(alts){
-  if(SP.cur<0 || SP.cur>=SP.ids.length) return;
-  // claim this result the same way sceneOnHeard/sceneMicTap do, so a
-  // continuous session that occasionally splits one answer into two final
-  // results can't advance the round twice
-  SP.gen++; var gen=SP.gen;
-  var i=SP.cur, id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
+/* a blocked microphone is a state, not a pause: it stays on screen with the
+   way out, instead of a pulsing "listening" that can never hear anything */
+function spBlocked(){
+  var st=document.getElementById("spState");
+  st.textContent="Microphone blocked. On iPhone: Settings, Apps, Safari, Microphone: Allow (and Settings, General, Keyboard, Enable Dictation). Then tap below."; st.className="spstate blocked";
+  document.getElementById("spMicBtn").hidden=false;
+}
+/* One attempt at the current word. Only while the word is still open: the mic
+   stays on through the reveal, and saying the revealed answer used to turn a
+   three-try miss into a pass. */
+function spAttempt(alts, fromTap){
+  if(!SP.running || SP.cur<0 || SP.cur>=SP.ids.length) return;
+  var i=SP.cur; if(SP.locked[i]) return;
+  var id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
+  /* graded first: "again" is the answer to mata, and "next" to tsugi, so a
+     command word only acts as a command when it is not the right answer */
   var g = dir==="j" ? enGrade(c.en, alts) : spGradeJa(c.kana, alts);
   var pass = dir==="j" ? g.sim>=SP_PASS_EN : g.sim>=SP_PASS_JA;
+  if(!pass){
+    var cmd=voiceCmd(alts);
+    if(cmd==="skip"){ spSkipTap(); return; }
+    if(cmd==="show"){ spShowTap(); return; }
+    if(cmd==="repeat"){ var g0=++SP.gen; if(spAudioOn()) spPlay(spPromptKey(id,dir), g0); return; }
+  }
+  SP.gen++; var gen=SP.gen;
   var close = dir==="j" ? g.sim>=SP_CLOSE_EN : g.sim>=SP_CLOSE_JA;
   var verdict = pass ? "good" : (close ? "close" : "missed");
   spShowHeard(g, pass, dir);
   SP.mic="ok";
   SP.heard[i] = dir==="j" ? (g.heard||"") : (g.romaji||"");
   SP.verdict[i]=verdict; SP.grade[i]=verdictPct(verdict);
-  // the try count is per word, not per call - it must only reset when the
-  // WORD changes, never on every call, or a retry could never count past one
   if(SP._failId!==id){ SP._failId=id; SP.tries[i]=0; }
   SP.tries[i]=(SP.tries[i]||0)+1;
   if(pass){
+    SP.locked[i]=true; recordSpoken(id, true);
     SP.state[i]="good"; spRenderTiles();
-    setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, 650);
+    spPlay(spAnswerKey(id,dir), gen).then(function(){ return wait(650); }).then(function(){ if(gen===SP.gen) spAsk(i+1); });
     return;
   }
   if(SP.tries[i]>=MAX_TRIES){
+    SP.locked[i]=true; recordSpoken(id, false);
     SP.state[i]="bad"; spRenderTiles();
     var reveal = dir==="j" ? c.en : (c.romaji||c.kana);
     document.getElementById("spHeard").innerHTML =
       '<span class="scv missed">Answer</span><div class="schrd">'+esc(reveal)+'</div>'+
       '<div class="schrd">you said <b>'+esc(SP.heard[i]||"nothing clear")+'</b></div>';
     document.getElementById("spState").textContent="";
+    spPlay(spAnswerKey(id,dir), gen);
     setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, REVEAL_MS);
     return;
   }
   document.getElementById("spState").textContent="Not quite ("+SP.tries[i]+" of "+MAX_TRIES+"). Say it again, or tap Show answer / Skip.";
   SP.state[i]="bad"; spRenderTiles();
+  if(fromTap){ document.getElementById("spMicBtn").hidden=false; return; }
   setTimeout(function(){ if(gen===SP.gen) spAsk(i); }, 950);
 }
-/* the tap-to-speak fallback for a phone that will not open the mic on its
-   own - same right-advances / wrong-retries-up-to-MAX_TRIES rule as the
-   continuous path above, just one explicit tap per attempt. */
+function spOnHeard(alts){ spAttempt(alts, false); }
 function spMicTap(){
   if(SP.cur<0 || SP.cur>=SP.ids.length) return;
-  var gen=++SP.gen, i=SP.cur, id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
+  var gen=++SP.gen, i=SP.cur, id=SP.ids[i], dir=SP.dir[id];
   document.getElementById("spMicBtn").hidden=true;
   spListening();
   listenOnce(SP_LISTEN_MS, dir==="j" ? "en-US" : "ja-JP", "spState").then(function(r){
     if(gen!==SP.gen) return;
+    if(r.err && /not-allowed|service-not-allowed/.test(r.err)){ SP.mic="blocked"; spBlocked(); return; }
     if(!r.alts.length){
       document.getElementById("spState").textContent="Still nothing heard.";
       document.getElementById("spMicBtn").hidden=false;
       return;
     }
-    var g = dir==="j" ? enGrade(c.en, r.alts) : spGradeJa(c.kana, r.alts);
-    var pass = dir==="j" ? g.sim>=SP_PASS_EN : g.sim>=SP_PASS_JA;
-    var close = dir==="j" ? g.sim>=SP_CLOSE_EN : g.sim>=SP_CLOSE_JA;
-    var verdict = pass ? "good" : (close ? "close" : "missed");
-    spShowHeard(g, pass, dir);
-    SP.heard[i] = dir==="j" ? (g.heard||"") : (g.romaji||"");
-    SP.verdict[i]=verdict; SP.grade[i]=verdictPct(verdict);
-    if(SP._failId!==id){ SP._failId=id; SP.tries[i]=0; }
-    SP.tries[i]=(SP.tries[i]||0)+1;
-    if(pass){ SP.state[i]="good"; spRenderTiles(); setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, 650); return; }
-    if(SP.tries[i]>=MAX_TRIES){
-      SP.state[i]="bad"; spRenderTiles();
-      var reveal = dir==="j" ? c.en : (c.romaji||c.kana);
-      document.getElementById("spHeard").innerHTML =
-        '<span class="scv missed">Answer</span><div class="schrd">'+esc(reveal)+'</div>'+
-        '<div class="schrd">you said <b>'+esc(SP.heard[i]||"nothing clear")+'</b></div>';
-      setTimeout(function(){ if(gen===SP.gen) spAsk(i+1); }, REVEAL_MS);
-      return;
-    }
-    SP.state[i]="bad"; spRenderTiles();
-    document.getElementById("spMicBtn").hidden=false;
+    spAttempt(r.alts, true);
   });
 }
-
-/* Skip this word unscored - for a mic that will not cooperate. */
 function spSkipTap(){
   if(SP.cur<0 || SP.cur>=SP.ids.length) return;
   listenCancel();
   var gen=++SP.gen, i=SP.cur;
+  SP.locked[i]=true;
   document.getElementById("spMicBtn").hidden=true;
   document.getElementById("spHeard").innerHTML='<span class="scv none">Skipped</span>';
   SP.verdict[i]="none"; SP.reason[i]="skipped"; SP.heard[i]=""; SP.grade[i]=null;
   SP.state[SP.cur]="skip"; spRenderTiles();
   setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 500);
 }
-/* Reveal the answer without grading whatever he said, same unscored result
-   as Skip but shows the word first so he can hear/read it before moving on. */
 function spShowTap(){
   if(SP.cur<0 || SP.cur>=SP.ids.length) return;
   listenCancel();
   var gen=++SP.gen, i=SP.cur, id=SP.ids[SP.cur], c=spCard(id), dir=SP.dir[id];
+  SP.locked[i]=true;
   document.getElementById("spMicBtn").hidden=true;
   var shown = dir==="j" ? c.en : c.romaji;
   document.getElementById("spHeard").innerHTML='<span class="scv none">Answer</span><div class="schrd">'+esc(shown||"")+'</div>';
   SP.verdict[i]="none"; SP.reason[i]="shown"; SP.heard[i]=""; SP.grade[i]=null;
   SP.state[SP.cur]="skip"; spRenderTiles();
+  spPlay(spAnswerKey(id,dir), gen);
   setTimeout(function(){ if(gen===SP.gen) spAsk(SP.cur+1); }, 1400);
 }
 function spFinish(){
+  // the round is over: the mic goes off, or a late word re-grades the last tile
+  contListenStop(); SP._contLang=null;
   var ok=0; for(var i=0;i<SP.ids.length;i++) if(SP.state[i]==="good") ok++;
   document.getElementById("spStage").hidden=true;
   var done=document.getElementById("spDone");
   document.getElementById("spDoneHead").textContent="Round done";
   document.getElementById("spDoneSub").textContent=
-    ok+" of "+SP.ids.length+" said back correctly. Nothing here changed your schedule.";
+    ok+" of "+SP.ids.length+" said back correctly. Words you could not say go first in Practice; your schedule is not changed.";
   var list=document.getElementById("spDoneList");
   if(list){
     var html="";
-    for(var i=0;i<SP.ids.length;i++){ if(SP.state[i]) html+=spHistRow(i); }
+    for(var i2=0;i2<SP.ids.length;i2++){ if(SP.state[i2]) html+=spHistRow(i2); }
     list.innerHTML=html;
   }
   done.hidden=false;
@@ -351,8 +393,12 @@ function speakingStart(){
   var ids=speakingWords();
   if(!ids.length){ toast("Nothing met yet. Study a few words first."); return; }
   SP.dir={}; SP.state={}; SP.cur=-1; SP.running=true; SP.mic="untried"; SP._contLang=null;
-  SP.tries={}; SP.heard={}; SP.grade={}; SP.verdict={}; SP.reason={}; SP._failId=null;
-  for(var i=0;i<ids.length;i++) SP.dir[ids[i]] = Math.random()<0.5 ? "e" : "j";
+  SP.tries={}; SP.heard={}; SP.grade={}; SP.verdict={}; SP.reason={}; SP.locked={}; SP._failId=null;
+  for(var i=0;i<ids.length;i++){ var cc=IDX[ids[i]];
+    /* one-way cards (particles, patterns, staff phrases) are never asked from
+       English, and with audio prompts on a card whose English is shared with
+       another ("good morning") is asked from its Japanese */
+    SP.dir[ids[i]] = (noReverse(cc) || (cc.sq && spAudioOn())) ? "j" : (Math.random()<0.5 ? "e" : "j"); }
   // each word's own direction is still a coin flip, but the order they're
   // asked in is grouped by direction so the mic can stay open across a
   // whole language block instead of reopening before every single word
@@ -386,6 +432,11 @@ function bindSpeaking(){
   var skip=document.getElementById("spSkipBtn"); if(skip) skip.addEventListener("click", spSkipTap);
   var again=document.getElementById("spAgain"); if(again) again.addEventListener("click", speakingAgain);
   var dn=document.getElementById("spDoneBtn"); if(dn) dn.addEventListener("click", speakingLeave);
+  document.addEventListener("visibilitychange",function(){
+    if(!SP.running) return;
+    if(document.visibilityState==="hidden"){ contListenStop(); SP._contLang=null; }
+    else if(SP.cur>=0 && !SP.locked[SP.cur]) spAsk(SP.cur);
+  });
   var host=document.getElementById("spTiles");
   if(host) host.addEventListener("click", function(e){
     var t=e.target.closest && e.target.closest(".sptile"); if(!t) return;
