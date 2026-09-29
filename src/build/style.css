@@ -697,3 +697,8 @@ details.sec[open] summary::after{content:"\2013"}
 .sw::before{content:"";position:absolute;left:-4px;right:-4px;top:-6px;bottom:-6px}
 /* Skip alone (Shadow has no Show) takes the whole row instead of half of it */
 .scacts-inline:has(> .btn[hidden]) > .btn:not([hidden]){grid-column:1/-1}
+
+/* a folded section keeps its count on the closed row */
+details.sec summary .aux{margin-left:auto;margin-right:12px;font-family:var(--font-num);font-size:11px;color:var(--ink-3)}
+details.sec.foldsec[open] summary{margin-bottom:10px}
+#startNote:empty{display:none}

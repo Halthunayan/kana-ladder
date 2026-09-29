@@ -15,7 +15,6 @@
     <div class="lvl-bar"><i id="lvlFill" style="width:2%"></i></div>
     <div class="lvl-foot"><span id="lvlScore">0 points</span><span id="lvlNext">40 to Level 2</span></div>
     <div class="skills" id="skillStrip"></div>
-    <div class="skill-weak" id="skillWeak" hidden></div>
   </div>
 
   <div class="tiles">
@@ -37,14 +36,6 @@
   <div class="warn" id="listenWarn" hidden></div>
   <div class="warn soft" id="backupWarn" hidden></div>
 
-  <div class="sec tripcard" id="tripCard">
-    <div class="sec-h"><h2>The trip</h2><div class="aux" id="tripAux"></div></div>
-    <p class="note" id="tripNote" hidden></p>
-    <div class="nextscene" id="nextScene" hidden></div>
-    <button class="btn btn-ghost" id="queueScenes" hidden>Learn the scene words first</button>
-    <button class="btn btn-ghost" id="checkDueBtn" hidden>This week's trip check is due (about 5 min)</button>
-  </div>
-
   <div class="sec">
     <div class="sec-h"><h2>Practice</h2><div class="aux" id="pracNote"></div></div>
     <div class="pracrow">
@@ -65,6 +56,14 @@
       <span class="pn">Speaking</span>
       <span class="pd">say back the words Practice is working on, the phone grades you</span>
     </button>
+  </div>
+
+  <div class="sec tripcard" id="tripCard">
+    <div class="sec-h"><h2>The trip</h2><div class="aux" id="tripAux"></div></div>
+    <p class="note" id="tripNote" hidden></p>
+    <div class="nextscene" id="nextScene" hidden></div>
+    <button class="btn btn-ghost" id="queueScenes" hidden>Learn the scene words first</button>
+    <button class="btn btn-ghost" id="checkDueBtn" hidden>This week's trip check is due (about 5 min)</button>
   </div>
 
   <div class="sec">
@@ -281,8 +280,8 @@
 <section class="screen" id="s-stats">
   <div class="mast"><h1>Progress</h1><div class="sub" id="statsSub"></div></div>
 
-  <div class="sec" style="margin-top:4px">
-    <div class="sec-h"><h2>Trip readiness</h2><div class="aux" id="readyAux"></div></div>
+  <details class="sec foldsec" style="margin-top:4px">
+    <summary><h2>Trip readiness</h2><span class="aux" id="readyAux"></span></summary>
     <div class="panel">
       <p class="note" id="readyTrip"></p>
       <div class="readylist" id="readyList"></div>
@@ -293,7 +292,7 @@
         <button class="btn" id="checkBtn" style="width:100%;margin-top:10px">Take the trip check</button>
       </div>
     </div>
-  </div>
+  </details>
 
   <div class="sec">
     <div class="sec-h"><h2>Level</h2><div class="aux" id="lvlAux"></div></div>
@@ -331,21 +330,10 @@
     <p class="fine" id="railNote"></p>
   </div>
 
-  <div class="sec">
-    <div class="sec-h"><h2>Next 14 days</h2><div class="aux" id="foreAux"></div></div>
-    <div class="chart"><svg id="foreChart" viewBox="0 0 320 62" role="img" aria-label="Reviews due over the next 14 days"></svg></div>
-  </div>
-
-  <div class="sec">
-    <div class="sec-h"><h2>Streak</h2><div class="aux" id="streakAux"></div></div>
-    <div class="chart"><svg id="streakChart" viewBox="0 0 320 62" role="img" aria-label="Reviews over the last 30 days"></svg></div>
-    <p class="fine" id="timeNote"></p>
-  </div>
-
-  <div class="sec">
-    <div class="sec-h"><h2>Hardest cards</h2><div class="aux" id="leechAux"></div></div>
+  <details class="sec foldsec">
+    <summary><h2>Hardest cards</h2><span class="aux" id="leechAux"></span></summary>
     <div class="leechlist" id="leechList"></div>
-  </div>
+  </details>
 
   <div class="sec">
     <div class="sec-h"><h2>Proficiency by area</h2><div class="aux" id="heatAux"></div></div>

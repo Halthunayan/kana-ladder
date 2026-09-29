@@ -4517,9 +4517,9 @@ function render(){
     btn.textContent="Start review · "+total+" card"+(total>1?"s":"")+" · about "+minutesFor(total)+" min";
     btn.dataset.mode="today";
     ahead.hidden=true; more.hidden=true;
-    var b=newBonus();
-    note.textContent = c.p.rev.length>CATCHUP ? "Catching up: "+c.p.rev.length+" reviews due, done first. Stop at any card, everything is saved."
-      : (b>0 ? b+" extra new word"+(b>1?"s":"")+" today" : "Stop at any card, everything is saved.");
+    /* no note under the button while cards are due (he asked, 29 Sep): the
+       button already says how many and how long */
+    note.textContent = "";
   } else {
     btn.disabled = c.aheadN===0 && !canMore;
     btn.dataset.mode="ahead";
@@ -4761,7 +4761,8 @@ function drawStreak(){
   var today=dayKey(Date.now()), vals=[], labs=[];
   for(var i=29;i>=0;i--){ var k=prevKey(today,i); vals.push(S.hist[k]||0);
     labs.push(i===29?k.slice(5).replace("-","/"):(i===0?"today":"")); }
-  svgBars(document.getElementById("streakChart"),vals,labs,"var(--ai)","","No reviews logged yet");
+  var el=document.getElementById("streakChart"); if(!el) return;   // chart removed from Progress (29 Sep)
+  svgBars(el,vals,labs,"var(--ai)","","No reviews logged yet");
 }
 function renderStats(){
   var sp = LAST || scoreParts();
