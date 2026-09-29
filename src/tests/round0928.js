@@ -311,10 +311,17 @@ console.log('\n16. Progress and Settings');
 {
   const {ctx,p,errs}=await hisLike(b);
   await p.evaluate(()=>__kl.go('stats')); await p.waitForTimeout(300);
-  const s=await p.evaluate(()=>({ready:document.getElementById('readyList').textContent, fore:document.getElementById('foreChart').innerHTML.length,
-    scenes:document.querySelectorAll('#sceneReadyList .scr').length, sk:document.getElementById('skillStrip2').textContent}));
+  const s=await p.evaluate(()=>{ const q=id=>document.getElementById(id);
+    const fold=el=>{ const d=el&&el.closest('details'); return !!(d && !d.open); };
+    const home=[...document.querySelectorAll('#s-home .sec-h h2')].map(h=>h.textContent);
+    return {ready:q('readyList').textContent, readyFolded:fold(q('readyList')), leechFolded:fold(q('leechList')),
+      readyAux:q('readyAux').textContent, gone:!q('foreChart') && !q('streakChart') && !q('timeNote') && !q('skillWeak'),
+      note:q('startNote').textContent, pracFirst:home.indexOf('Practice')>=0 && home.indexOf('Practice')<home.indexOf('The trip'),
+      scenes:document.querySelectorAll('#sceneReadyList .scr').length, sk:q('skillStrip2').textContent}; });
   ok(/Backup/.test(s.ready),'Trip readiness lists the backup, storage and voice');
-  ok(s.fore>50,'the next 14 days are charted');
+  ok(s.readyFolded && s.leechFolded && /ready/.test(s.readyAux),'Trip readiness and Hardest cards start folded, with the count on the closed row (29 Sep)');
+  ok(s.gone,'the 14-day forecast, the streak chart, the time note and the retention warning are gone (29 Sep)');
+  ok(s.note==='' && s.pracFirst,'no note under the start button; Practice sits above The trip on Home (29 Sep)');
   ok(s.scenes===17,'every scene shows how many lines are ready');
   await p.evaluate(()=>__kl.go('set')); await p.waitForTimeout(300);
   const g=await p.evaluate(()=>({groups:document.querySelectorAll('#s-set details').length, sub:document.getElementById('setSub').textContent}));
