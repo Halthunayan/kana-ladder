@@ -2589,12 +2589,12 @@ function renderCard(){
     back.innerHTML = jpBlockHtml(c) + ruleHtml +
       '<div class="conj-use">'+esc(c.use)+'</div>'+ noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else if(d==="j"){
-    /* The one word a sentence may still be missing is glossed on the FRONT
-       now: it used to appear only after the flip, so the sentence could not be
-       read at the moment it was being asked. */
-    front.innerHTML = askedHtml(c,"front") + jpBlockHtml(c) + (isSent(c) ? gapHtml(c) : "") +
+    /* The question it answers and the gloss of its new word both sit on the
+       BACK: on the front, "Are you here for sightseeing?" and "kankou:
+       sightseeing" handed him the meaning he was being asked for (29 Sep). */
+    front.innerHTML = jpBlockHtml(c) +
       '<div class="hint">'+(Sess.focus?"From memory: what does this mean?":"What does this mean?")+'</div>';
-    back.innerHTML = engl() + sayHtml(c) + frameHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
+    back.innerHTML = engl() + askedHtml(c,"back") + (isSent(c) ? gapHtml(c) : "") + sayHtml(c) + frameHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else {
     var ord = isSent(c) ? orderTask(c) : null;
     Sess.order = ord;
