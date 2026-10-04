@@ -412,6 +412,36 @@ console.log('\n17. Audit fixes (independent audit council, 28 Sep)');
   await ctx.close();
 }
 
+console.log('\n18. A study card never scrolls (1 Oct)');
+for(const [w,h] of [[393,759],[375,580]]){
+  const probe=await open(b, base({}));
+  const ids=await probe.p.evaluate(()=>__kl.INTRO.slice(0,60).map(c=>c.id));
+  await probe.ctx.close();
+  const items={};
+  ids.forEach(id=>{ ['j','e','a'].forEach(d=>{ items[id+'|'+d]=pack(it()); }); });
+  ['nS003','nS006','s407','s023','nA123','nB014'].forEach(id=>{ ['j','e','a'].forEach(d=>{ items[id+'|'+d]=pack(it()); }); });
+  const ctx=await b.newContext({viewport:{width:w,height:h}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base(items));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html'); await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0);
+  const keys=Object.keys(items).filter(k=>!/\|e$/.test(k) || /^c/.test(k));
+  const fit=()=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const g=document.getElementById('grades').getBoundingClientRect();
+    r(document.documentElement.scrollHeight<=innerHeight+1 && g.bottom<=innerHeight+1); }))));
+  let bad=[];
+  await p.evaluate(()=>__kl.startSession('ahead'));
+  for(const key of keys){
+    await p.evaluate(key=>{ const s=__kl.sess(); s.on=true; s.key=key; s.shown=false; __kl.renderCard(); },key);
+    if(!await fit()) bad.push(key+' front');
+    await p.evaluate(()=>__kl.reveal());
+    if(!await fit()) bad.push(key+' back');
+  }
+  ok(bad.length===0,'at '+w+'x'+h+', '+keys.length+' cards fit on one screen, front and back'+(bad.length?' ('+bad.slice(0,4).join(', ')+')':''));
+  ok(errs.length===0,'no page errors');
+  await ctx.close();
+}
+
 await b.close();
 console.log(fails? '\nFAILED: '+fails : '\nALL ROUND 0928 CHECKS PASSED');
 process.exit(fails?1:0);
