@@ -702,3 +702,79 @@ details.sec[open] summary::after{content:"\2013"}
 details.sec summary .aux{margin-left:auto;margin-right:12px;font-family:var(--font-num);font-size:11px;color:var(--ink-3)}
 details.sec.foldsec[open] summary{margin-bottom:10px}
 #startNote:empty{display:none}
+
+/* ---------- one screen, no scrolling (1 Oct) ----------
+   A study card never scrolls. The tab bar is hidden while studying, so its
+   reserved space goes back to the card; then fitCard() steps the card down
+   through f1..f5 only as far as this phone's screen needs. */
+#s-review{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+#s-review .review-wrap{gap:10px}
+#s-review .card{min-height:0}
+/* once a listening card is turned, the big play button has done its job: it
+   becomes one small row with the slow replay beside it */
+.card.shown.lis #faceFront{flex:0 0 auto;flex-direction:row;flex-wrap:wrap;gap:12px;padding:10px 16px}
+.card.shown.lis #faceFront .playbig{width:52px;height:52px}
+.card.shown.lis #faceFront .playbig svg{width:24px;height:24px}
+.card.shown.lis #faceFront .hint{display:none}
+.card.shown.lis #faceFront .slowbtn{margin-top:0}
+/* the confusion list sits inside the answer, on the same left edge as the example */
+#faceBack .missbox{width:100%;max-width:min(31ch,100%);margin:6px auto 0;text-align:left}
+.card.f1 .face{padding:16px 16px;gap:7px}
+.card.f1 .answer{padding:14px 16px;gap:7px}
+.card.f1 .card-tag{padding:8px 14px}
+.card.f1 .ex-box{margin:4px auto 6px}
+.card.f1 .gap-box,.card.f1 .framebox,.card.f1 .alsobox{margin-top:6px}
+.card.f1.shown #faceFront .hint{display:none}
+.card.f2 .tags{display:none}
+.card.f2 .kana{font-size:clamp(22px,6.4vw,30px)}
+.card.f2 .romaji{font-size:clamp(18px,5.2vw,22px)}
+.card.f2 .english{font-size:clamp(18px,5.4vw,23px)}
+.card.f2 .playbig{width:84px;height:84px}
+.card.f2 .askbox{margin-bottom:6px}
+.card.f3 .face{padding:10px 14px;gap:5px}
+.card.f3 .answer{padding:10px 14px;gap:5px}
+.card.f3.shown #faceFront .kana{font-size:clamp(18px,5vw,24px)}
+.card.f3.shown #faceFront .romaji{font-size:clamp(15px,4.4vw,18px)}
+.card.f3 .kana.sent{font-size:clamp(15px,4vw,18px);line-height:1.6}
+.card.f3 .speak{width:40px;height:40px}
+.card.f3 .missbox{padding-top:8px;margin-top:4px}
+.card.f3 .misline{margin:4px 0}
+.card.f4 .english{font-size:clamp(16px,4.8vw,20px)}
+.card.f4 .ex-box,.card.f4 .gap-box,.card.f4 .framebox,.card.f4 .alsobox,.card.f4 .askbox{padding:7px 10px}
+.card.f4 .ex-r,.card.f4 .ex-e,.card.f4 .gap-e{font-size:.8rem}
+.card.f4 .kanji{display:none}
+.card.f5 .ex-e{display:none}
+.card.f5 .gnote{display:none}
+/* small phones only (iPhone SE class): the question shrinks once answered,
+   then the example's translation and its box go */
+.card.f6.shown #faceFront{padding:6px 12px;gap:4px}
+.card.f6.shown #faceFront .english{font-size:clamp(14px,4.2vw,17px)}
+.card.f6.shown #faceFront .kana.sent{font-size:14px;line-height:1.5}
+.card.f6 .say-e,.card.f6 .ex-head{display:none}
+.card.f6 .gnote{display:none}
+.card.f7 .ex-box{display:none}
+.card.f7 .playbig{width:60px;height:60px}
+.card.f7.shown.lis #faceFront{display:none}
+.card.f7 .meanbox .btn{padding:8px 14px;min-height:40px}
+.card.f7 #faceBack .slowbtn{margin-top:2px}
+.card.f7.lis .askbox,.card.f7 .gap-lab{display:none}
+.card.f7 .gap-box{padding:6px 10px;gap:3px}
+/* Practice: the answer after a miss, and Next, stacked full width */
+.grades.fb{display:flex;flex-direction:column;gap:8px}
+.grades.fb .focus-ans{margin:0;padding:8px 12px;flex-direction:row;flex-wrap:wrap;justify-content:center;column-gap:10px;row-gap:0;align-items:baseline}
+.grades.fb .focus-ans .kana.sm{font-size:clamp(17px,4.8vw,21px);line-height:1.35}
+.grades.fb .focus-ans .romaji.sm{font-size:clamp(14px,4vw,16px)}
+.grades.fb .focus-ans .conj-gloss{width:100%;text-align:center;margin-top:0}
+.card.f1 .opts{margin-top:8px;gap:6px}
+.card.f2 .opt-btn{padding:8px 12px}
+.card.f2 .opt-btn .ot.jp{font-size:18px}
+.card.f3 .opt-btn{padding:6px 10px;gap:0}
+.card.f3 .opt-btn .ot{font-size:14px}
+.card.f3 .playbig{width:64px;height:64px}
+.card.f3 .pracbar{padding-top:4px;padding-bottom:4px}
+.grades.f3.fb .focus-ans{padding:6px 10px}
+.card.f4 .opt-btn .os{font-size:12px}
+.card.f5 .pracbar{display:none}
+.card.f6 .opts{grid-template-columns:1fr 1fr;max-width:none}
+.card.f6 .face .hint{display:none}
+.card.f7 .face .slowbtn{margin-top:4px;padding-top:4px;padding-bottom:4px}

@@ -2420,6 +2420,7 @@ function optionsHtml(opts){
    "did I get that right" to fudge. The right option is always revealed, and a
    wrong pick waits for a tap so the answer can actually be read. */
 function renderFocusCard(){
+  document.getElementById("grades").classList.remove("fb");
   var q=Sess.q, c=IDX[q.id], it=S.items[q.key]||newItem();
   var front=document.getElementById("faceFront"), back=document.getElementById("faceBack");
   document.getElementById("fold").hidden=true;
@@ -2514,6 +2515,9 @@ function pickOption(i){
 function showAfter(good){
   var q=Sess.q, c=IDX[q.id];
   var g=document.getElementById("grades");
+  /* the answer and Next stack full width: in the four-column grade grid they
+     were squeezed into columns one character wide */
+  g.classList.remove("prac2"); g.classList.add("fb");
   var heardAlready = q.kind==="mcAudio" ||
     (q.kind==="mcJE" && S.settings.autoPlay!==false);
   if(good && S.settings.tts!==false && !heardAlready) speakCard(q.kind==="pair" && q.sent ? q.sent : c);
@@ -2539,6 +2543,35 @@ function showAfter(good){
     document.getElementById("nextBtn").addEventListener("click",function(){ practiceAnswer(false); });
   }
 }
+/* One screen, never a scroll: the card steps down through f1..f5 (tighter
+   spacing, then smaller type, then the least needed lines) only until the
+   grade buttons fit above the bottom of this phone's screen. */
+function fitCard(){
+  var scr=document.getElementById("s-review"); if(!scr || !scr.classList.contains("on")) return;
+  var card=scr.querySelector(".card"); if(!card) return;
+  var g=document.getElementById("grades");
+  for(var i=1;i<=7;i++){ card.classList.remove("f"+i); g.classList.remove("f"+i); }
+  card.classList.toggle("shown", !document.getElementById("fold").hidden);
+  card.classList.toggle("lis", document.getElementById("dirChip").classList.contains("dir-a"));
+  function over(){
+    var de=document.documentElement;
+    return de.scrollHeight > window.innerHeight+1 || (g && g.getBoundingClientRect().bottom > window.innerHeight+1);
+  }
+  for(var lv=1; lv<=7 && over(); lv++){ card.classList.add("f"+lv); g.classList.add("f"+lv); }
+  if(window.scrollY) window.scrollTo(0,0);
+}
+var FIT_PENDING=false;
+function fitSoon(){ if(FIT_PENDING) return; FIT_PENDING=true;
+  requestAnimationFrame(function(){ FIT_PENDING=false; fitCard(); }); }
+(function(){
+  try{
+    var mo=new MutationObserver(fitSoon), opts={childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:["hidden"]};
+    var run=function(){ ["faceFront","fold","grades"].forEach(function(id){ var el=document.getElementById(id); if(el) mo.observe(el,opts); }); };
+    if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",run); else run();
+    window.addEventListener("resize",fitSoon);
+    if(document.fonts && document.fonts.ready) document.fonts.ready.then(fitSoon);
+  }catch(e){}
+})();
 function renderCard(){
   if(Sess.autoNext){ clearTimeout(Sess.autoNext); Sess.autoNext=null; }
   // a free-recall question has no options, so the ordinary card renderer draws it
@@ -2936,7 +2969,7 @@ function reveal(){
 }
 function renderGrades(shown){
   var g=document.getElementById("grades");
-  g.classList.remove("prac2");
+  g.classList.remove("prac2"); g.classList.remove("fb");
   if(!shown){ g.innerHTML='<button class="btn showbtn" id="showBtn">Show answer</button>';
     document.getElementById("showBtn").addEventListener("click",reveal); return; }
   if(Sess.practice){
@@ -3118,7 +3151,7 @@ function answer(gr){
   if(gr===0 && !Sess.practice){
     var box=document.getElementById("fold"), mh=missHtml(k);
     if(box && mh){
-      box.insertAdjacentHTML("beforeend", mh);
+      document.getElementById("faceBack").insertAdjacentHTML("beforeend", mh);
       var g=document.getElementById("grades");
       g.classList.remove("prac2");
       g.innerHTML='<button class="btn showbtn" id="missNext">Next card</button>';
@@ -5586,6 +5619,7 @@ function go(name){
   if(name==="home"||name==="stats") render();
   if(name==="set"){ applySettings(); storageReport(); }
   if(name==="home") setTimeout(applyPendingUpdate,0);
+  if(name==="review") fitSoon();
 }
 var toastTimer=null;
 function toast(msg){
