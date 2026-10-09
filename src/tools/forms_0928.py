@@ -44,6 +44,8 @@ NON_VOLITIONAL = {
     'shinpai suru':  {'potential', 'tai', 'tekudasai'},
     'shippai suru':  {'potential', 'tai', 'tekudasai'},
     'nareru':        {'potential'},
+    'tariru':        {'potential', 'tai', 'tekudasai'},   # 9 Oct 2026
+    'nakunaru':      {'potential', 'tai', 'tekudasai'},
 }
 # Verbs that happen to you, or to a thing: "please ..." cannot be asked of them.
 NO_TEKUDASAI = {
@@ -53,7 +55,7 @@ NO_TEKUDASAI = {
     'nureru', 'komaru', 'yogoreru', 'niau', 'sugiru', 'oosugiru', 'chirakaru',
     'kogeru', 'kusaru', 'aku', 'shimaru', 'mitsukaru', 'kakaru', 'mayou', 'makeru',
     'okoru', 'nayamu', 'shinu', 'naku', 'hotto suru',
-    'shinpai suru', 'shippai suru',
+    'shinpai suru', 'shippai suru', 'tariru', 'nakunaru',
 }
 # iru (to need, c0858) shares its romaji with iru (to be, c0176, "ite kudasai",
 # please stay), so it is named by id

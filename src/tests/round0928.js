@@ -390,6 +390,9 @@ console.log('\n17. Audit fixes (independent audit council, 28 Sep)');
     return {f, bk}; });
   ok(!/sightseeing/i.test(face.f) && !/Asked/i.test(face.f),'a Japanese to English sentence front gives nothing away: no question in English, no gloss of its new word (29 Sep)');
   ok(/Asked/i.test(face.bk) && /Are you here for sightseeing\?/.test(face.bk),'the question it answers is on the back');
+  const lis=await p.evaluate(()=>{ const k=__kl, S=k.sess(); S.key='nS003|a'; S.shown=false; k.renderCard(); k.reveal();
+    const bk=document.getElementById('faceBack'); return {en:/Yes, sightseeing/.test(bk.textContent), btn:!!document.getElementById('meanBtn')}; });
+  ok(lis.en && !lis.btn,'a listening sentence shows its meaning with the answer, no extra tap (9 Oct)');
   const q=await p.evaluate(()=>{ const k=__kl, ids=k.allSceneWords(); const ords=ids.map(id=>k.IDX[id].ord);
     return {n:ids.length, sorted:ords.every((v,i)=>!i||ords[i-1]<=v)}; });
   ok(q.n>0 && q.n<130 && q.sorted,'"learn the scene words first" queues '+q.n+' words, in the planned order');
@@ -439,6 +442,34 @@ for(const [w,h] of [[393,759],[375,580]]){
   }
   ok(bad.length===0,'at '+w+'x'+h+', '+keys.length+' cards fit on one screen, front and back'+(bad.length?' ('+bad.slice(0,4).join(', ')+')':''));
   ok(errs.length===0,'no page errors');
+  await ctx.close();
+}
+
+console.log('\n19. A word with no card no longer slips past the gate (9 Oct)');
+{
+  const {ctx,p}=await hisLike(b);
+  const r=await p.evaluate(()=>{ const k=__kl, x=k.SIDX.nT005;
+    const known=id=>{ k.S.items[id+'|j']={s:1,st:0,n:4,ef:2.5,iv:10,due:Date.now()+9e8,lapses:0,piv:0,seen:5,ok:5,df:4,sb:10,lr:Date.now()}; };
+    const forget=id=>{ delete k.S.items[id+'|j']; delete k.S.items[id+'|e']; delete k.S.items[id+'|a']; };
+    ['c1812','c1813'].forEach(forget);
+    ['c0229','c0238','c0581'].forEach(known);
+    const both=k.sentOpen(x);
+    known('c1812'); const one=k.sentOpen(x);
+    const cards=['c1812','c1813','c1814','c1815','c1816','c1817','c1818','c1819','c1820','c1821','c1830','c1835']
+      .map(id=>!!k.IDX[id]);
+    return {w:x.w.slice(), both, one, miss:k.sentMissing(x), cards,
+      nT004:k.SIDX.nT004.w.slice(), nP004:k.SIDX.nP004.w.slice(), nD116:k.SIDX.nD116.w.slice(),
+      jaa:k.isFuncWord('c1834'), na:k.isFuncWord('c1833'),
+      nihai:k.SIDX.s351.w.slice(), nidai:k.SIDX.nE023.w.slice(), juugo:k.SIDX.nS005.w.slice()}; });
+  ok(r.w.indexOf('c1812')>=0 && r.w.indexOf('c1813')>=0,'ano kikai de chaaji dekimasu links kikai and chaaji ('+r.w.join(',')+')');
+  ok(r.both===false,'with kikai and chaaji both untaught it stays closed');
+  ok(r.one===true && r.miss.length===1 && r.miss[0]==='c1813','with kikai known it opens with chaaji as its one glossed gap');
+  ok(r.cards.every(Boolean),'the new trip words are cards');
+  ok(r.nT004.indexOf('c1814')>=0 && r.nT004.indexOf('c1830')>=0,'zandaka ga tarimasen links zandaka and tariru');
+  ok(r.nP004.indexOf('c1819')>=0 && r.nP004.indexOf('c0746')<0,'Suica links the travel card, never the watermelon');
+  ok(r.nD116.indexOf('c1835')>=0,'totte wa ikemasen links the must-not pattern');
+  ok(r.jaa && r.na,'jaa and na count as function words, as hai and the particles do');
+  ok(r.nihai.indexOf('c1836')>=0 && r.nidai.indexOf('c1419')>=0 && r.juugo.indexOf('c1837')>=0,'a counter fused into its number is linked: nihai, nidai, juugonichi');
   await ctx.close();
 }
 

@@ -43,14 +43,21 @@ const set=await p.evaluate(()=>{
           nogloss:said.filter(c=>!c.sayR||!c.sayE).map(c=>c.id),
           same:said.filter(c=>c.say===c.kana).map(c=>c.id),
           fun:k.IDX['c1798'].say, funR:k.IDX['c1798'].sayR, funE:k.IDX['c1798'].sayE,
-          nonCounter:said.filter(c=>c.pos!=='counter').map(c=>c.id),
+          // sama (c1823, 9 Oct) is a bound suffix like a counter: said alone it
+          // is not Japanese, and the voice returned suma. It is the one other card
+          // allowed a spoken form.
+          counters:said.filter(c=>c.pos==='counter').length,
+          nonCounter:said.filter(c=>c.pos!=='counter' && c.id!=='c1823').map(c=>c.id),
+          sama:k.IDX['c1823'] && k.IDX['c1823'].sayR,
           nfinal:said.filter(c=>/\u3093$/.test(c.say)).map(c=>c.id+':'+c.sayR)};
 });
-ok(set.n===20,'20 bound counters carry a spoken form ('+set.n+')');
+// hai (cups) and nichi (days of the month) joined the 20 on 9 Oct
+ok(set.counters===22,'22 bound counters carry a spoken form ('+set.counters+')');
+ok(set.sama==='okyakusama','sama, the one bound suffix that is not a counter, is said inside okyakusama');
 ok(set.bad.length===0,'every spoken form contains the card it is for ('+JSON.stringify(set.bad)+')');
 ok(set.nogloss.length===0,'and comes with romaji and an English gloss, since he cannot read kana');
 ok(set.same.length===0,'and is a different word from the bare suffix');
-ok(set.nonCounter.length===0,'only counters were touched ('+JSON.stringify(set.nonCounter)+')');
+ok(set.nonCounter.length===0,'only counters and sama were touched ('+JSON.stringify(set.nonCounter)+')');
 ok(set.funR==='gofun desu','the written note still reads gofun desu ('+set.funR+')');
 ok(set.nfinal.length===0,'no spoken form ends in n, where the device voice releases the nasal into a vowel and gofun came back as "go-fun-o" ('+JSON.stringify(set.nfinal)+')');
 
