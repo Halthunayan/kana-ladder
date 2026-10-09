@@ -5,6 +5,12 @@
 const {chromium}=require('playwright');
 const fails=[]; const ok=(c,m)=>{ if(c) console.log('  PASS  '+m); else { fails.push(m); console.log('  FAIL  '+m);} };
 const BASE=process.env.BASE||'https://halthunayan.github.io/kana-ladder/';
+// The counts come from the source this run checked out, so adding a card can
+// never fail the live check again (1812 was written in here until 9 Oct 2026).
+const path=require('path'), fs=require('fs');
+const SRC=path.join(__dirname,'..');
+const WANT_W=JSON.parse(fs.readFileSync(path.join(SRC,'deck','deck_full.json'),'utf8')).length;
+const WANT_S=JSON.parse(fs.readFileSync(path.join(SRC,'sentences','sent_full.json'),'utf8')).length;
 (async()=>{
 const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
 const ctx=await b.newContext({viewport:{width:393,height:852}});
@@ -27,7 +33,7 @@ const m=await p.evaluate(()=>({
   focus: !!document.getElementById('focusBtn')
 }));
 ok(/Kana/.test(m.title), 'the page is Kana Ladder ("'+m.title+'")');
-ok(m.words===1812 && m.sents===1534, 'the whole deck shipped ('+m.words+' words, '+m.sents+' sentences)');
+ok(m.words===WANT_W && m.sents===WANT_S, 'the whole deck shipped ('+m.words+' of '+WANT_W+' words, '+m.sents+' of '+WANT_S+' sentences)');
 ok(m.hasKl===false, 'the test hook is correctly absent in production');
 ok(m.home && m.car && m.focus, 'the home screen, car mode and Focus buttons are all present');
 ok(bad.length===0, bad.length? 'failed requests: '+bad.slice(0,3).join(' ; ') : 'every asset resolved');
@@ -91,7 +97,7 @@ await p.reload({waitUntil:'load'}).catch(()=>{});
 await p.waitForTimeout(3000);
 const off=await p.evaluate(()=>({t:document.title,
   words:(document.getElementById('deck-data')?JSON.parse(document.getElementById('deck-data').textContent).length:0)}));
-ok(/Kana/.test(off.t) && off.words===1812, 'it reopens offline with the whole deck');
+ok(/Kana/.test(off.t) && off.words===WANT_W, 'it reopens offline with the whole deck ('+off.words+' words)');
 await ctx.setOffline(false);
 
 console.log('\n4. no errors');
