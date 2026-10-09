@@ -812,7 +812,7 @@ function sentGap(){
    nai desu opened on the strength of iie and desu alone, with tooi (far) never
    taught, and it became his worst card. A sentence now needs at least one of
    its content words known before it opens. */
-var FUNC_IDS={c0249:1,c0013:1,c0014:1,c0250:1,c0251:1,c0253:1,c0252:1,c0009:1,c0032:1,c0254:1};
+var FUNC_IDS={c0249:1,c0013:1,c0014:1,c0250:1,c0251:1,c0253:1,c0252:1,c0009:1,c0032:1,c0254:1,c1834:1};
 function isFuncWord(id){ var c=IDX[id]; return !c || !!FUNC_IDS[id] || c.pos==="particle"; }
 function sentOpen(x){
   if(!x.w.length) return false;
@@ -2603,14 +2603,9 @@ function renderCard(){
     front.innerHTML = '<button class="playbig" data-speak="1" aria-label="Play the audio">'+SPK+'</button>'+
       '<div class="hint">What did you hear?<br><span class="sub2">tap to play again</span></div>'+
       '<button class="slowbtn" data-slow="1">Play it slower</button>';
-    /* A sentence heard is two questions: did the sounds land, and is the
-       meaning known. The romaji comes first with a slow replay beside it; the
-       meaning is one more tap. */
-    back.innerHTML = jpBlockHtml(c) + (isSent(c)
-        ? '<button class="slowbtn" data-slow="1">Play it slower</button>'+
-          '<div class="meanbox"><button class="btn btn-ghost" id="meanBtn">Show the meaning</button>'+
-          '<div id="meanTxt" hidden>'+engl()+'</div></div>'
-        : engl()) +
+    /* The meaning shows with the answer, sentences included (9 Oct: the extra
+       "Show the meaning" tap is gone). The slow replay stays on the front row. */
+    back.innerHTML = jpBlockHtml(c) + engl() +
       askedHtml(c,"back") + gapHtml(c) + sayHtml(c) + frameHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
   } else if(isConj(c)){
     var ruleHtml = c.rule ? '<div class="conj-rule">'+esc(c.rule)+'</div>' : "";
@@ -2638,8 +2633,6 @@ function renderCard(){
     back.innerHTML = jpBlockHtml(c) + alsoHtml(c) + sayHtml(c) + frameHtml(c) + exHtml(c) + noteHtml(c) + tagsHtml(c) + leechHtml(it,k);
     if(ord) wireOrder(ord, function(ok){ Sess.typed=ok; Sess.verdict=ok?1:0; reveal(); });
   }
-  var mb=document.getElementById("meanBtn");
-  if(mb) mb.addEventListener("click",function(e){ e.stopPropagation(); mb.hidden=true; document.getElementById("meanTxt").hidden=false; });
   wireSpeak(c);
   wireLeech(c,k);
   var ti=document.getElementById("typeIn");
@@ -2949,7 +2942,6 @@ function reveal(){
   if(Sess.focus && Sess.q && Sess.q.kind!=="flip") return;
   var c=cardOf(Sess.key), d=dirOf(Sess.key);
   /* the back carries its own slow replay; two of them stacked was one too many */
-  var fs=document.querySelector("#faceFront .slowbtn"); if(fs && d==="a" && isSent(c)) fs.hidden=true;
   if(d==="e" && S.settings.typing){
     var ti=document.getElementById("typeIn"), v=document.getElementById("verdict");
     if(ti && v){ var ok=answerMatches(ti.value, c);

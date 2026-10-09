@@ -222,6 +222,29 @@ if _gaps2:
                      'readability gate cannot count it: ' + ', '.join(sorted(set(_gaps2))[:12]) +
                      (' and %d more' % (len(set(_gaps2))-12) if len(set(_gaps2))>12 else ''))
 
+# ---- guard: every word a sentence uses has a card, and the sentence links it ----
+# The guard above checks the words that have cards. A word with no card at all
+# was invisible to it and to the gate: ano kikai de chaaji dekimasu (you can
+# top it up at that machine) opened on 9 Oct 2026 on the strength of ano and
+# dekimasu, with kikai and chaaji never taught. Every token must now be a
+# linked card, one of its forms, a fusion the linker splits, or a pattern.
+_unc=_LS.guard_uncovered(_s, _d, _fm)
+if _unc:
+    _unc=sorted(set(_unc))
+    raise SystemExit('these sentences use a word no linked card covers, so the '
+                     'readability gate cannot see it: ' + ', '.join(_unc[:12]) +
+                     (' and %d more' % (len(_unc)-12) if len(_unc)>12 else ''))
+# The guard proves itself on every build: a sentence carrying a word with no
+# card, and one with its word unlinked, must both be refused, or a guard that
+# had quietly stopped working would pass everything above.
+_probe=[dict(_s[0], id='probe-a', romaji=_s[0]['romaji'].rstrip('.')+' zzqx.'),
+        dict(next(_x for _x in _s if _x['id']=='nT005'), id='probe-b',
+             w=[_w for _w in next(_x for _x in _s if _x['id']=='nT005')['w'] if _w!='c1812'])]
+_pr=_LS.guard_uncovered(_probe, _d, _fm)
+assert any(_m.startswith('probe-a uses zzqx') for _m in _pr) and \
+       any(_m.startswith('probe-b uses kikai') for _m in _pr), \
+    'the uncovered-word guard no longer refuses a word without a card: %r' % _pr
+
 # ---- guard: one sound, one card ----
 # ni is both "two" and the particle, ima both "now" and "living room", kaze both
 # "wind" and "a cold". Linking both twins for one occurrence made 251 sentences
