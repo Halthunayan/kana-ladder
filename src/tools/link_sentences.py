@@ -23,7 +23,8 @@ failures the council found fixed:
     both, and the build refuses same-romaji twins unless both really occur;
   * a sentence that uses a grammar pattern links the pattern's card (masen ka,
     mashou, tai desu, ga arimasu, ga imasu, te mo ii desu ka, nakereba
-    narimasen, koto ga dekimasu), and the pattern swallows the words spelled
+    narimasen and nakute wa ikemasen, koto ga dekimasu, and since 9 Oct 2026
+    te wa ikemasen and nai to ikemasen), and the pattern swallows the words spelled
     inside it (te mo ii desu ka credits c0601, not mo, ii or desu).
 
 A sentence whose link set comes out unchanged keeps its stored w and g exactly.
@@ -47,9 +48,16 @@ NO_FORM_MATCH = {'c0964', 'c1094', 'c1332'}
 # safely. Numbers and counters are split by rule (see split_number).
 TOKEN_LINKS = {
     'nan': ['c0230'],             # nan is nani (what) before d, t and n
-    'okyakusama': ['c0715'],
+    'okyakusama': ['c0715', 'c1823'],
     'gozaimasen': ['c1784'],
-    'kaado': [],
+    # 9 Oct 2026: fusions the rules cannot split. An honorific o- on a counter
+    # (ofutari, ohitori), a number fused with do (degrees), the joined
+    # spelling of kamo shiremasen, and tennai said as tennai desu ka.
+    'ofutari': ['c0045'],
+    'ohitori': ['c0044'],
+    'sanjuudo': ['c0354', 'c1425'],
+    'kamoshiremasen': ['c1389'],
+    'tennai': ['c0999'],
 }
 # Two-token phrases that are a deck card written another way.
 PHRASE_LINKS = {
@@ -61,6 +69,22 @@ PHRASE_LINKS = {
 OVERRIDE = {
     # Suica, the transit card, is spelled like suika (watermelon)
     'nP004': {'drop': ['c0746']}, 'nT003': {'drop': ['c0746']}, 'nT025': {'drop': ['c0746']},
+    # yoku nai is ii (good) in the negative, not yoku (often)
+    'nE108': {'drop': ['c0058'], 'add': ['c0193']},
+    # ni the particle; "number" in the English is a phone number or a count,
+    # not ni (two)
+    'nE059': {'drop': ['c0035'], 'add': ['c0237']}, 'nT010': {'drop': ['c0035'], 'add': ['c0237']},
+    # matanakute wa ikemasen ka asks whether he must; it is not an invitation
+    'nD090': {'drop': ['c0252']},
+    # tetsudatte kuremasen ka is a request, not an invitation
+    'nA095': {'drop': ['c0252']},
+}
+# Pattern cards that swallow a word spelled inside them, for patterns matched
+# as ordinary cards (koto ni suru) rather than by a pattern test, listed
+# here.
+SWALLOW = {
+    'c1726': {'c1822'}, 'c1727': {'c1822'},       # koto ni suru / koto ni naru: koto
+    'c0307': {'c1834'},                            # jaa ne: jaa
 }
 
 # grammar pattern cards: (id, test on the token list)
@@ -84,6 +108,22 @@ def _pat_temo(t):
     return False
 def _pat_nakereba(t):
     return any(t[i].endswith('nakereba') and t[i+1] in ('narimasen', 'ikemasen') for i in range(len(t)-1))
+def _pat_tewa(t, te_forms=None):
+    # te wa ikemasen, must not (totte wa ikemasen); nakute wa ikemasen is "must".
+    # The word before wa has to be a verb's te-form: asatte wa ikemasen (I
+    # cannot go the day after tomorrow) is iku, not the pattern.
+    return any(len(t[i]) > 2 and t[i].endswith(('te', 'de')) and not t[i].endswith('nakute')
+               and (te_forms is None or t[i] in te_forms)
+               and t[i+1] == 'wa' and t[i+2] in ('ikemasen', 'ikenai', 'narimasen') for i in range(len(t)-2))
+def _pat_nakutewa(t):
+    return any(t[i].endswith('nakute') and t[i+1] == 'wa' and t[i+2] in ('ikemasen', 'narimasen')
+               for i in range(len(t)-2))
+def _pat_naito(t, nai_forms=None):
+    # kakanai to ikemasen: have to (naito). The word before to has to be a
+    # verb's -nai form: kanai to ikemasen is "I cannot go with my wife".
+    return any(t[i].endswith('nai') and len(t[i]) > 3 and (nai_forms is None or t[i] in nai_forms)
+               and t[i+1] == 'to' and t[i+2] in ('ikemasen', 'ikenai')
+               for i in range(len(t)-2))
 def _pat_koto(t):
     return any(t[i] == 'koto' and t[i+1] == 'ga' and t[i+2].startswith('deki') for i in range(len(t)-2))
 # what each pattern swallows when it is linked: the words spelled inside it
@@ -93,7 +133,9 @@ PATTERN_INNER = {
     'c0256': {'c0176'},                            # ga imasu: iru
     'c0601': {'c0241', 'c0193', 'c0330', 'c0249', 'c0245', 'c1781'},   # te mo ii desu ka
     'c0602': {'c0580'},                            # nakereba narimasen: naru
-    'c0603': {'c0581'},                            # koto ga dekimasu: dekiru
+    'c0603': {'c0581', 'c1822'},                   # koto ga dekimasu: dekiru, koto
+    'c1835': set(),                                # te wa ikemasen
+    'c1383': {'c0240'},                            # nai to ikemasen: to
     'c0252': set(), 'c0253': set(),
 }
 
@@ -259,7 +301,7 @@ def verb_surfaces(card, row):
         # the request form is the te-form plus kudasai, a word of its own
         if name == 'tekudasai': r = r[:-len(' kudasai')]; name = 'te'
         s.setdefault(tuple(r.split(' ')), name)
-    for suf in ('masu', 'mashita', 'masen', 'mashou', 'tai', 'takunai', 'takatta', 'nagara'):
+    for suf in ('masu', 'mashita', 'masen', 'mashou', 'tai', 'takunai', 'takatta', 'nagara', 'tagatte'):
         add(stem + suf, suf)
     add(stem + 'masen deshita', 'masendeshita')
     for suf in ('nai', 'nakatta', 'nakereba', 'naide', 'nakute', 'naku'):
@@ -276,13 +318,16 @@ def verb_surfaces(card, row):
             add(ps + suf, 'pot-' + suf)
     return s
 
+# an adjective form that is another word: kokunai is domestic, not "not strong"
+ADJ_SKIP = {'c1829': {'kokunai', 'kokunakatta'}}
+
 def adj_surfaces(card):
     r = card['romaji']
     s = {}
     if card['pos'] == 'adj-i' and r.endswith('i') and (len(r) > 2 or r == 'ii') and card['id'] != 'c1775':
         st = 'yo' if r == 'ii' else r[:-1]
         for suf in ('ku', 'katta', 'kute', 'kereba', 'kunai', 'kunakatta', 'sou'):
-            s[(st + suf,)] = 'adj-' + suf
+            if st + suf not in ADJ_SKIP.get(card['id'], ()): s[(st + suf,)] = 'adj-' + suf
     return s
 
 
@@ -303,9 +348,9 @@ def number_pieces(deck):
         for v in vs: P.append((v, cid, 'num'))
     COUNTERS = {'ji': 'ji', 'fun': 'fun', 'pun': 'fun', 'en': 'en', 'nin': 'nin', 'mai': 'mai',
                 'mei': 'mei', 'sai': 'sai', 'byou': 'byou', 'bansen': 'bansen', 'gatsu': 'gatsu',
-                'youbi': 'youbi', 'hai': None, 'pai': None, 'bai': None, 'hon': None, 'pon': None,
-                'bon': None, 'ko': None, 'dai': None, 'satsu': None, 'hiki': None, 'piki': None,
-                'biki': None, 'kai': None, 'ban': None, 'nichi': None, 'ka': None, 'jikan': None,
+                'youbi': 'youbi', 'hai': 'hai', 'pai': 'hai', 'bai': 'hai', 'hon': None, 'pon': None,
+                'bon': None, 'ko': 'ko', 'dai': 'dai', 'satsu': 'satsu', 'hiki': None, 'piki': None,
+                'biki': None, 'kai': 'kai', 'ban': None, 'nichi': 'nichi', 'ka': None, 'jikan': None,
                 'kagetsu': None, 'shuukan': None, 'kagetsu': None, 'mairu': None}
     for surf, rom in COUNTERS.items():
         P.append((surf, by.get(rom) if rom else None, 'ctr'))
@@ -339,15 +384,17 @@ def ikemasen_not_iku(st, i):
 # the everyday sense is the one linked.
 DEFAULT_SENSE = {'iru': 'c0176', 'kaeru': 'c0181', 'atsui': 'c0167', 'hashi': 'c0472',
                  'kiru': 'c0499', 'ima': 'c0061', 'kaze': 'c0729', 'hana': 'c0543',
-                 'kami': 'c0503', 'shita': 'c0158', 'ni': 'c0237'}
+                 'kami': 'c0503', 'shita': 'c0158', 'ni': 'c0237', 'hai': 'c0013'}
 
 # the tokens a pattern card stands for once it is linked
 PATTERN_COVERS = {
     'c0255': {'arimasu', 'arimasen', 'arimashita'},
     'c0256': {'imasu', 'imasen', 'imashita'},
-    'c0601': {'ii', 'yoroshii', 'mo'},
+    'c0601': {'ii', 'yoroshii', 'mo', 'desu', 'ka'},
     'c0602': {'narimasen', 'ikemasen'},
-    'c0603': {'dekimasu', 'dekimasen', 'dekimashita'},
+    'c0603': {'koto', 'dekimasu', 'dekimasen', 'dekimashita'},
+    'c1835': {'ikemasen', 'ikenai', 'narimasen'},
+    'c1383': {'to', 'ikemasen', 'ikenai'},
 }
 
 
@@ -398,6 +445,15 @@ class Linker:
         self.by_romaji = collections.defaultdict(list)
         for c in self.deck:
             if not c.get('dup'): self.by_romaji[c['romaji'].replace("'", '')].append(c['id'])
+        # te-forms and -nai forms of every verb, for the patterns built on them,
+        # and every form of the verbs of motion, for "mi ni ikimasu"
+        self.te_forms, self.nai_forms, self.motion = set(), set(), set()
+        for cid, sf in vs.items():
+            for t, name in sf.items():
+                if len(t) != 1: continue
+                if name == 'te': self.te_forms.add(t[0])
+                if name == 'neg-nai': self.nai_forms.add(t[0])
+                if cid in ('c0180', 'c0179', 'c0181'): self.motion.add(t[0])
         self.suru_nouns = {}
         for c in self.deck:
             if c['pos'] == 'verb' and c['romaji'].endswith(' suru'):
@@ -447,6 +503,14 @@ class Linker:
                 if ids is None and t.startswith('o') and t[1:] in self.nouns and t not in self.by_romaji:
                     cs = self.nouns[t[1:]]
                     ids = [max(cs, key=lambda c: (len(self.kw[c] & ekw), -self.rank(c)))]
+                # an honorific go- noun (goriyou, gokazoku)
+                if ids is None and t.startswith('go') and t[2:] in self.nouns and t not in self.by_romaji:
+                    cs = self.nouns[t[2:]]
+                    ids = [max(cs, key=lambda c: (len(self.kw[c] & ekw), -self.rank(c)))]
+                # a verb stem before ni and a verb of motion: mi ni ikimasu (go to see)
+                if (ids is None and t in self.stems and i + 2 < len(st) and st[i+1] == 'ni'
+                        and st[i+2] in self.motion):
+                    ids = [v for v in self.verb_by_stem(t)]
                 if ids is None and t in self.suru_nouns:
                     ids = [self.suru_nouns[t]]
             for cid in ids or []:
@@ -529,6 +593,9 @@ class Linker:
         if _pat_temo(st): pats.append('c0601')
         if _pat_nakereba(st): pats.append('c0602')
         if _pat_koto(st): pats.append('c0603')
+        if _pat_tewa(st, self.te_forms): pats.append('c1835')
+        if _pat_nakutewa(st): pats.append('c0602')
+        if _pat_naito(st, self.nai_forms): pats.append('c1383')
         for p in pats:
             inner = set(PATTERN_INNER[p])
             if p == 'c0601':
@@ -544,6 +611,10 @@ class Linker:
                     elif cid != 'c0249' and len(hits.get(cid, [])) > 1: inner.discard(cid)
             w = [c for c in w if c not in inner]
             if p not in w: w.append(p)
+
+        for big, inner in SWALLOW.items():
+            # a swallowed word that also stands on its own elsewhere stays
+            if big in w: w = [c for c in w if c not in inner or len(hits.get(c, [])) > 1]
 
         for wid in x.get('wx', []):
             c = self.D[wid]
@@ -678,6 +749,90 @@ def guard_unlinked(sent, deck, forms):
                 ids = split_number(t, pieces)
                 if ids and not (set(ids) <= linked):
                     out.append('%s uses %s (%s)' % (x['id'], t, '+'.join(D[i]['romaji'] for i in ids)))
+    return out
+
+
+# Tokens a sentence may carry with no card behind them, each with its reason.
+# Empty on purpose: every word he reads is a word he can be taught.
+ALLOW_UNCOVERED = {}
+
+
+def number_parts(tok, pieces):
+    """the number and counter pieces fused in tok as (surface, card id or None),
+    or None when tok is not a number fused with a counter"""
+    best = None
+    def go(i, acc):
+        nonlocal best
+        if i == len(tok):
+            if len(acc) >= 2 and (best is None or len(acc) < len(best)): best = list(acc)
+            return
+        for surf, cid, kind in pieces:
+            if tok.startswith(surf, i): go(i + len(surf), acc + [(surf, cid, kind)])
+    go(0, [])
+    if not best or split_number(tok, pieces) is None: return None
+    return [(sf, cid) for sf, cid, _ in best]
+
+
+def guard_uncovered(sent, deck, forms):
+    """every token of every sentence is accounted for by a card the sentence
+    links, at that place in the sentence: the card itself, one of its forms, a
+    fusion the linker splits, or a pattern that covers it. A word with no card
+    at all is invisible to the readability gate: ano kikai de chaaji dekimasu
+    opened on 9 Oct 2026 with kikai and chaaji never taught, because neither
+    had a card to count. A multi-word card or form covers its words only where
+    the whole of it occurs, so ga arimasu cannot vouch for a stray arimasu."""
+    D = {c['id']: c for c in deck}
+    pieces = number_pieces(deck)
+    out = []
+    for x in sent:
+        linked = [w for w in (x.get('w') or []) if w in D]
+        st = toks(x['romaji'])
+        n = len(st)
+        done = [False] * n
+        nouns, stems, adjku = set(), set(), set()
+        def mark(seq):
+            k = len(seq)
+            if not k: return
+            for i in range(n - k + 1):
+                if tuple(st[i:i+k]) == seq:
+                    for j in range(i, i + k): done[j] = True
+        for w in linked:
+            c = D[w]
+            mark(tuple(toks(c['romaji'])))
+            row = forms.get(w)
+            if c['pos'] == 'verb' and row:
+                for t in verb_surfaces(c, row): mark(t)
+                m = {row[i]: row[i+2] for i in range(0, len(row), 3)}.get('masu')
+                if m: stems.add(m.split(' ')[-1][:-4])
+            if c['pos'] == 'adj-i':
+                for t, name in adj_surfaces(c).items():
+                    mark(t)
+                    if name == 'adj-ku': adjku.add(t[0])
+            if row and c['pos'] in ('adj-i', 'adj-na'):
+                for i in range(0, len(row), 3): mark(tuple(toks(row[i+2])))
+            if c['pos'] == 'noun' and ' ' not in c['romaji']: nouns.add(c['romaji'])
+            for t in PATTERN_COVERS.get(w, ()): mark((t,))
+        for (a, b), cid in PHRASE_LINKS.items():
+            if cid in linked: mark((a, b))
+        for i, t in enumerate(st):
+            if done[i]: continue
+            if TOKEN_LINKS.get(t) and set(TOKEN_LINKS[t]) <= set(linked): continue
+            parts = number_parts(t, pieces)
+            if parts and all(cid for _, cid in parts) and {cid for _, cid in parts} <= set(linked): continue
+            # an honorific prefix on a linked noun or on a linked verb's stem:
+            # omizu, goriyou, omochi desu ka, oazukari shimasu
+            if t[:1] == 'o' and (t[1:] in nouns or t[1:] in stems): continue
+            if t[:2] == 'go' and t[2:] in nouns: continue
+            # a linked verb's stem before ni and a verb of motion: mi ni ikimasen ka
+            if t in stems and i + 2 < n and st[i+1] == 'ni': continue
+            # an adjective's negative written apart: tooku nai, muzukashiku nakatta
+            if t in ('nai', 'nakatta') and i > 0 and st[i-1] in adjku: continue
+            if t in ALLOW_UNCOVERED: continue
+            if parts and not all(cid for _, cid in parts):
+                out.append('%s uses %s, a counter (%s) with no card' %
+                           (x['id'], t, '+'.join(sf for sf, cid in parts if not cid)))
+            else:
+                out.append('%s uses %s, which no card it links covers' % (x['id'], t))
     return out
 
 
