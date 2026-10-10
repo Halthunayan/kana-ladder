@@ -378,6 +378,51 @@ console.log('\n9. three wrong tries in a row reveal the answer, grade it at the 
   await ctx.close();
 }
 
+console.log('\n10. reading the Japanese aloud is not an answer and does not cost a try (10 Oct)');
+{
+  const ctx=await b.newContext({viewport:{width:393,height:852}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  // a Japanese-answer word first, so the English block has a switch to announce
+  await p.evaluate(()=>{ const k=window.__kl;
+    k.SP.ids=['c0000','c0238','c0050']; k.SP.dir={c0000:'e',c0238:'j',c0050:'j'};
+    k.SP.state={}; k.SP.tries={}; k.SP.cur=-1; k.SP.running=true; k.go('speak'); k.spAsk(0); });
+  await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('こんにちは'));
+  await p.waitForFunction(()=>window.__kl.SP.cur===1,null,{timeout:20000});
+  const sw=await p.evaluate(()=>({st:document.getElementById('spState').textContent, chip:document.getElementById('spDirChip').textContent}));
+  ok(/Switching to English/.test(sw.st),'the switch to English is announced ('+sw.st+')');
+  ok(/in English/.test(sw.chip),'the direction label says it in words ('+sw.chip+')');
+  await p.waitForFunction(()=>!!window.__recActive && window.__recActive.lang==='en-US' && !window.__kl.SP.locked[1],null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('D'));
+  await p.waitForTimeout(400);
+  const r1=await p.evaluate(()=>({tries:window.__kl.SP.tries[1]||0, state:window.__kl.SP.state[1], cur:window.__kl.SP.cur,
+    heard:document.getElementById('spHeard').textContent, st:document.getElementById('spState').textContent}));
+  ok(r1.tries===0 && r1.state!=='bad' && r1.cur===1,'"D" for de is the Japanese read aloud: no try used, still on de ('+JSON.stringify(r1)+')');
+  ok(/That was the Japanese/.test(r1.heard) && /did not count/.test(r1.st),'and he is told to say the meaning instead');
+  await p.evaluate(()=>window.__recSay('at'));
+  await p.waitForFunction(()=>window.__kl.SP.state[1]==='good',null,{timeout:20000});
+  ok(true,'then "at" passes de');
+  await p.waitForFunction(()=>window.__kl.SP.cur===2 && !window.__kl.SP.locked[2],null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('N'));
+  await p.waitForTimeout(400);
+  const r2=await p.evaluate(()=>({tries:window.__kl.SP.tries[2]||0, state:window.__kl.SP.state[2]}));
+  ok(r2.tries===0 && r2.state!=='bad','"N" for en is not counted either ('+JSON.stringify(r2)+')');
+  // a real wrong English answer still costs a try
+  await p.evaluate(()=>window.__recSay('banana'));
+  await p.waitForFunction(()=>(window.__kl.SP.tries[2]||0)===1,null,{timeout:20000});
+  ok(true,'a wrong English answer still costs a try');
+  await p.waitForTimeout(2500);   // the retry re-asks the word after a short beat
+  await p.evaluate(()=>window.__recSay('yen'));
+  await p.waitForFunction(()=>window.__kl.SP.state[2]==='good',null,{timeout:20000});
+  ok(true,'and "yen" passes en');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+
 await b.close();
 console.log('\n'+(fails.length? 'FAILED: '+fails.length+'\n  '+fails.join('\n  ') : 'SPEAKING GRADES BOTH DIRECTIONS, NO CLICKS NEEDED'));
 process.exit(fails.length?1:0);
