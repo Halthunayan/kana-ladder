@@ -206,7 +206,7 @@ function spStageShow(c, dir){
   prompt.innerHTML = dir==="j"
     ? '<div class="kana">'+esc(c.kana)+'</div><div class="romaji">'+esc(c.romaji)+'</div>'
     : '<div class="spen">'+esc(c.en)+'</div>';
-  document.getElementById("spDirChip").textContent = dir==="j" ? "JP → EN, say it" : "EN → JP, say it";
+  document.getElementById("spDirChip").textContent = dir==="j" ? "Say the meaning in English" : "Say it in Japanese";
   document.getElementById("spHeard").innerHTML="";
   document.getElementById("spState").textContent="";
   document.getElementById("spState").className="spstate";
@@ -250,6 +250,12 @@ function spAsk(i){
   var freshBlock = (i===0) || (SP.dir[SP.ids[i-1]]!==dir);
   var pre = spAudioOn() ? spPlay(spPromptKey(id,dir), gen)
           : (dir==="j" ? wait(estSpeechMs(c.kana)) : wait(500+Math.min(1300, String(c.en||"").length*16)));
+  /* the language changes here: say so, and give him a moment to switch */
+  if(freshBlock && i>0){
+    var st0=document.getElementById("spState");
+    st0.textContent = dir==="j" ? "Switching to English: say what each word means." : "Switching to Japanese: say each word in Japanese.";
+    pre = pre.then(function(){ return wait(1400); });
+  }
   pre.then(function(){
     if(gen!==SP.gen) return;
     SP.locked[i]=false;
@@ -298,6 +304,12 @@ function spAttempt(alts, fromTap){
     if(cmd==="show"){ spShowTap(); return; }
     if(cmd==="repeat"){ var g0=++SP.gen; if(spAudioOn()) spPlay(spPromptKey(id,dir), g0); return; }
   }
+  if(!pass && dir==="j" && g.sim<SP_CLOSE_EN && spReadAloud(c, alts)){
+    document.getElementById("spHeard").innerHTML='<span class="scv none">That was the Japanese</span>'+
+      '<div class="schrd">heard <b>'+esc(alts[0]||"")+'</b></div>';
+    document.getElementById("spState").textContent="Now say what it means in English. That one did not count as a try.";
+    return;
+  }
   SP.gen++; var gen=SP.gen;
   var close = dir==="j" ? g.sim>=SP_CLOSE_EN : g.sim>=SP_CLOSE_JA;
   var verdict = pass ? "good" : (close ? "close" : "missed");
@@ -329,6 +341,26 @@ function spAttempt(alts, fromTap){
   SP.state[i]="bad"; spRenderTiles();
   if(fromTap){ document.getElementById("spMicBtn").hidden=false; return; }
   setTimeout(function(){ if(gen===SP.gen) spAsk(i); }, 950);
+}
+/* The Japanese read aloud, not answered. On 10 Oct the first two words of the
+   English block, de and en, each burned all three tries as "D" and "N": the
+   recogniser, listening for English, wrote down the Japanese word he read off
+   the card. Reading the prompt is not an answer, so it is not a try. Letters
+   are read as their names, the way the recogniser spells a sound it cannot
+   place (D for de, N for en). */
+var SP_LETTER={a:"ei",b:"bi",c:"shi",d:"de",e:"i",f:"efu",g:"ji",h:"eichi",i:"ai",j:"jei",k:"kei",
+  l:"eru",m:"emu",n:"en",o:"o",p:"pi",q:"kyu",r:"aru",s:"esu",t:"ti",u:"yu",v:"bui",w:"daburu",
+  x:"ekusu",y:"wai",z:"zetto"};
+function spReadAloud(c, alts){
+  var want=String(c.romaji||"").toLowerCase().replace(/[^a-z]/g,"");
+  if(!want) return false;
+  for(var i=0;i<alts.length;i++){
+    var raw=String(alts[i]||"").toLowerCase(), flat=raw.replace(/[^a-z]/g,"");
+    if(!flat) continue;
+    var named=raw.split(/[^a-z]+/).filter(Boolean).map(function(w){ return w.length===1 && SP_LETTER[w] ? SP_LETTER[w] : w; }).join("");
+    if(flat===want || named===want || kanaSim(want, flat)>=0.75 || kanaSim(want, named)>=0.75) return true;
+  }
+  return false;
 }
 function spOnHeard(alts){ spAttempt(alts, false); }
 function spMicTap(){
