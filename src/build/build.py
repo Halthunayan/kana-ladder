@@ -18,8 +18,11 @@ assert js.count(_boot)==1, 'the boot line moved; scenes.js needs a place inside 
 # listenOnce, kanaSim, kanaKey, kanaToRomaji and kanjiToKana rather than
 # duplicating them, so it has to live in the same closure, after the module
 # it borrows from.
+# voicelab.js (10 Oct 2026: pitch marks, comparing his voice with the model,
+# the length-pair drill and the weekly voice check) borrows from both.
 js=js.replace(_boot, open(B+'scenes.js',encoding='utf-8').read()+'\n'+
-                      open(B+'speaking.js',encoding='utf-8').read()+'\n'+_boot, 1)
+                      open(B+'speaking.js',encoding='utf-8').read()+'\n'+
+                      open(B+'voicelab.js',encoding='utf-8').read()+'\n'+_boot, 1)
 scenes_src=open(R('scenes','scenes.json'),encoding='utf-8').read()
 _audio_ok = os.path.exists(R('pwa','audio','v1','manifest.json'))
 js=js.replace('__AUDIO_SHIPPED__', 'true' if _audio_ok else 'false')
@@ -460,6 +463,50 @@ for _pp in _pairs:
         'pair %s differs in %r, not in its particles %s and %s' % (_pp['id'], _diff[0], _pa, _pb)
     assert _gloss(_sbyid[_sa]['en'])!=_gloss(_sbyid[_sb]['en']), 'pair %s has one English for two sentences' % _pp['id']
 pairs_src=_j.dumps(_pairs, ensure_ascii=False, separators=(',', ':'))
+# ---- the other spellings the phone writes for a word, for Speaking ----
+# A card with no kanji of its own (ikutsu, nihon, ...) still comes back from
+# the recogniser in kanji (幾つ, 日本), which the reading table cannot convert,
+# so a right answer scored as a miss. Each entry is keyed by a card's kana and
+# was checked against OpenJTalk's reading when it was written (10 Oct 2026).
+# Speaking applies an entry only when that card is the one being asked.
+_asr=_j.load(open(R('deck','asr_spellings.json'),encoding='utf-8'))
+_dk={c['kana'] for c in _d}
+for _k,_v in _asr.items():
+    assert _k in _dk, 'asr_spellings.json names %s, which is no card' % _k
+    assert _v and all(_x and _x!=_k for _x in _v), 'asr_spellings.json entry %s is empty or repeats the kana' % _k
+asr_src=_j.dumps(_asr, ensure_ascii=False, separators=(',', ':'))
+# ---- pitch: high or low on each sound of a word, Tokyo dictionary accent ----
+# From tools/pitch_1010.py (dictionary accent first, OpenJTalk as a fallback),
+# one H or L per mora (a small tsu, n and a long-vowel mark count as one each),
+# then for single-word nouns a bar and the pitch of a particle after the word.
+# Refused: a pattern without one letter per sound of the card's own kana
+# (drawn over the wrong sounds it would teach the wrong word), and a single
+# word whose pitch rises again after it has fallen (Tokyo words fall once:
+# that is two words drawn as one, the fault the 11 Oct audit found).
+_pitch=_j.load(open(R('deck','pitch.json'),encoding='utf-8'))
+def _morae(k):
+    _o=[]
+    for _ch in _K.kata2hira(k):
+        if _ch in 'ゃゅょぁぃぅぇぉゎ' and _o: _o[-1]+=_ch
+        elif '\u3041'<=_ch<='\u3096' or _ch=='ー': _o.append(_ch)
+    return _o
+_byk={c['id']:c for c in _d}
+for _k,_v in _pitch.items():
+    assert _k in _byk, 'pitch.json names %s, which is no card' % _k
+    assert _re.fullmatch(r'[HL]+(\|[HL])?', _v or ''), 'pitch.json %s is not a pattern of H and L: %r' % (_k,_v)
+    _pt=_v.split('|')[0]
+    assert len(_pt)==len(_morae(_byk[_k]['kana'])), \
+        'pitch.json %s has %d marks for %d sounds (%s)' % (_k, len(_pt), len(_morae(_byk[_k]['kana'])), _byk[_k]['kana'])
+    if ' ' not in _byk[_k]['romaji'].strip():
+        assert not _re.search(r'HL+H', _pt), 'pitch.json %s (%s) rises again after a fall: %s' % (_k, _byk[_k]['romaji'], _pt)
+        assert not _re.match(r'HH', _pt), 'pitch.json %s (%s) starts high-high: %s' % (_k, _byk[_k]['romaji'], _pt)
+    assert '|' not in _v or ' ' not in _byk[_k]['romaji'].strip(), 'pitch.json %s: a particle mark on a phrase' % _k
+pitch_src=_j.dumps(_pitch, separators=(',', ':'))
+# ---- the length pairs: two words told apart only by a long sound ----
+_pairs_len=_j.load(open(R('deck','length_pairs.json'),encoding='utf-8'))
+for _p in _pairs_len:
+    assert len(_p)==2 and all(_x in _byk for _x in _p), 'length_pairs.json has a bad pair %r' % (_p,)
+lenpairs_src=_j.dumps(_pairs_len, separators=(',', ':'))
 print('particle pairs: %d' % len(_pairs))
 
 # ---- guard: house style of romaji and English (council item 54) ----
@@ -527,6 +574,9 @@ tail=('\n<script type="application/json" id="deck-data">'+deck+'</script>'
       '\n<script type="application/json" id="scenes-data">'+scenes_src+'</script>'
       '\n<script type="application/json" id="pairs-data">'+pairs_src+'</script>'
       '\n<script type="application/json" id="kanji-data">'+kanji_src+'</script>'
+      '\n<script type="application/json" id="asr-data">'+asr_src+'</script>'
+      '\n<script type="application/json" id="pitch-data">'+pitch_src+'</script>'
+      '\n<script type="application/json" id="lenpairs-data">'+lenpairs_src+'</script>'
       '\n<script>\n'+js+'\n</script>\n')
 
 # ---- PWA: complete standalone document ----
