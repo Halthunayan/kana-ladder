@@ -34,6 +34,12 @@ const fakeRec=()=>{
   window.SpeechSynthesisUtterance=function(t){this.text=t;this.rate=1;};
   try{ speechSynthesis.speak=u=>{ window.__spoke.push(u.text); setTimeout(()=>{u.onstart&&u.onstart(); u.onend&&u.onend();},5); }; speechSynthesis.cancel=()=>{}; }catch(e){}
   window.__recSay=function(next){
+    // nobody answers within a quarter second of seeing the word or the miss:
+    // a line said that fast is held until the app's guard window has passed,
+    // which is what a person speaking would do anyway
+    const K=window.__kl;
+    if(K && K.SP && K.SP.guardUntil && Date.now()<K.SP.guardUntil){
+      setTimeout(()=>window.__recSay(next), K.SP.guardUntil-Date.now()+10); return true; }
     const R=window.__recActive; if(!R) return false;
     if(next===undefined){ R.onerror&&R.onerror({error:'no-speech'}); if(!R.continuous) window.__recActive=null; R.onend&&R.onend(); return true; }
     if(next===null){ R.onerror&&R.onerror({error:'not-allowed'}); window.__recActive=null; R.onend&&R.onend(); return true; }
@@ -156,7 +162,7 @@ console.log('\n3. wrong turns a ticket red and asks again; right turns it green 
   const r=await p.evaluate(()=>{ const k=window.__kl;
     const tiles=Array.prototype.map.call(document.querySelectorAll('#spTiles .sptile'),t=>t.className);
     return {starts:window.__recStarts, state:k.SP.state, head:document.getElementById('spDoneHead').textContent,
-      sub:document.getElementById('spDoneSub').textContent, tiles:tiles};
+      sub:document.getElementById('spDoneHead').textContent+' '+document.getElementById('spDoneSub').textContent, tiles:tiles};
   });
   ok(r.starts===3,'the mic reopened once per direction change, not once per attempt ('+r.starts+')');
   ok(r.state[0]==='good' && r.state[1]==='good' && r.state[2]==='good','all three end up correct ('+JSON.stringify(r.state)+')');
@@ -165,10 +171,10 @@ console.log('\n3. wrong turns a ticket red and asks again; right turns it green 
   // reserved for a first-try answer, same as the other two
   ok(/s-retry/.test(r.tiles[0]),'the one that needed a second try is yellow, not green ('+r.tiles[0]+')');
   ok(/s-good/.test(r.tiles[1]) && /s-good/.test(r.tiles[2]),'the two first-try answers are green ('+r.tiles[1]+', '+r.tiles[2]+')');
-  // tap a solved ticket and see the answer
-  await p.click('#spTiles .sptile[data-i="0"]'); await p.waitForTimeout(80);
-  const peek=await p.evaluate(()=>({hidden:document.getElementById('spPeek').hidden, text:document.getElementById('spPeek').textContent}));
-  ok(!peek.hidden && /konnichiwa/.test(peek.text),'tapping a ticket shows what it was ('+peek.text+')');
+  // the finish screen lists the word that took two tries, with its answer;
+  // the tickets are gone there (tapping one used to open a panel and scroll)
+  const fin=await p.evaluate(()=>({tiles:document.getElementById('spTiles').hidden, list:document.getElementById('spDoneList').textContent}));
+  ok(fin.tiles && /konnichiwa/.test(fin.list),'the finish lists what it was, without the tickets ('+fin.list.slice(0,80)+')');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();
 }
@@ -219,7 +225,7 @@ console.log('\n5. no recogniser here still runs the round, without hanging or sc
     k.spAsk(0);
   });
   await p.waitForFunction(()=>!document.getElementById('spDone').hidden,null,{timeout:20000});
-  const r=await p.evaluate(()=>({state:window.__kl.SP.state, sub:document.getElementById('spDoneSub').textContent}));
+  const r=await p.evaluate(()=>({state:window.__kl.SP.state, sub:document.getElementById('spDoneHead').textContent}));
   ok(r.state[0]==='skip' && r.state[1]==='skip','both words are marked skipped, not right or wrong ('+JSON.stringify(r.state)+')');
   ok(/0 of 2/.test(r.sub),'the round says nothing was scored ('+r.sub+')');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
@@ -369,8 +375,15 @@ console.log('\n9. three wrong tries in a row reveal the answer, grade it at the 
   ok(stillHere===0,'the reveal holds before moving on, rather than advancing straight away ('+stillHere+')');
   // and it does move on by itself once that hold is over, with no tap needed
   await p.waitForFunction(()=>window.__kl.SP.cur===1,null,{timeout:20000});
-  await p.click('#spSkipBtn');   // finish the round without needing to know word1's own gloss
+  await p.click('#spSkipBtn');   // move past word1 without needing to know its own gloss
+  // the word missed three times comes back once at the end, as the review
+  await p.waitForFunction(()=>window.__kl.SP.inReview && window.__kl.SP.cur===0 && !window.__kl.SP.locked[0],null,{timeout:20000});
+  const rv=await p.evaluate(()=>({st:document.getElementById('spState').textContent, prog:document.getElementById('spProg').textContent}));
+  ok(/Review/.test(rv.prog),'the missed word comes back at the end, marked as the review ('+rv.prog+')');
+  await p.click('#spSkipBtn');
   await p.waitForFunction(()=>!document.getElementById('spDone').hidden,null,{timeout:20000});
+  const st0=await p.evaluate(()=>({s:window.__kl.SP.state[0], g:window.__kl.SP.grade[0]}));
+  ok(st0.s==='bad' && st0.g===0,'skipping the review leaves it as missed, with its grade ('+JSON.stringify(st0)+')');
   const list=await p.evaluate(()=>document.getElementById('spDoneList').textContent);
   ok(/(^|[^0-9])0%/.test(list),'the finish screen\'s history carries the numeric grade through ('+list.slice(0,160)+')');
   ok(/konnichiwa/.test(list),'and the correct answer it was graded against');
@@ -398,7 +411,7 @@ console.log('\n10. reading the Japanese aloud is not an answer and does not cost
   ok(/in English/.test(sw.chip),'the direction label says it in words ('+sw.chip+')');
   await p.waitForFunction(()=>!!window.__recActive && window.__recActive.lang==='en-US' && !window.__kl.SP.locked[1],null,{timeout:20000});
   await p.evaluate(()=>window.__recSay('D'));
-  await p.waitForTimeout(400);
+  await p.waitForTimeout(1100);   // past the guard after a pass, and graded
   const r1=await p.evaluate(()=>({tries:window.__kl.SP.tries[1]||0, state:window.__kl.SP.state[1], cur:window.__kl.SP.cur,
     heard:document.getElementById('spHeard').textContent, st:document.getElementById('spState').textContent}));
   ok(r1.tries===0 && r1.state!=='bad' && r1.cur===1,'"D" for de is the Japanese read aloud: no try used, still on de ('+JSON.stringify(r1)+')');
@@ -408,7 +421,7 @@ console.log('\n10. reading the Japanese aloud is not an answer and does not cost
   ok(true,'then "at" passes de');
   await p.waitForFunction(()=>window.__kl.SP.cur===2 && !window.__kl.SP.locked[2],null,{timeout:20000});
   await p.evaluate(()=>window.__recSay('N'));
-  await p.waitForTimeout(400);
+  await p.waitForTimeout(1100);
   const r2=await p.evaluate(()=>({tries:window.__kl.SP.tries[2]||0, state:window.__kl.SP.state[2]}));
   ok(r2.tries===0 && r2.state!=='bad','"N" for en is not counted either ('+JSON.stringify(r2)+')');
   // a real wrong English answer still costs a try
@@ -419,6 +432,180 @@ console.log('\n10. reading the Japanese aloud is not an answer and does not cost
   await p.evaluate(()=>window.__recSay('yen'));
   await p.waitForFunction(()=>window.__kl.SP.state[2]==='good',null,{timeout:20000});
   ok(true,'and "yen" passes en');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+
+console.log('\n11. the rebuilt round: fairer grading, no dead time, hints, his own call, cues (10 Oct)');
+{
+  const ctx=await b.newContext({viewport:{width:393,height:852}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  await ctx.addInitScript(()=>{ window.__cues=[]; const C=window.AudioContext;
+    window.AudioContext=function(){ const c=new C(); const o=c.createOscillator.bind(c);
+      c.createOscillator=function(){ window.__cues.push(Date.now()); return o(); }; return c; }; });
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  const g=await p.evaluate(()=>{ const k=window.__kl, I=k.IDX, P=0.62, E=0.6;
+    const ja=(id,said)=>k.spGradeJa(I[id].kana,[said],I[id]).sim>=P, en=(id,said)=>k.enGrade(I[id].en,[said]).sim>=E;
+    return {
+      uchiKanji:ja('c0119','家'), nihonKanji:ja('c1761','日本'), ikutsuKanji:ja('c0360','幾つ'),
+      shichiDigit:ja('c0672','7'), shichiKanji:ja('c0672','七'), hachiDigit:ja('c0041','8'),
+      uchiWrong:ja('c0119','いえ'),
+      large:en('c0189','large'), tasty:en('c0113','tasty'), ate:en('c0041','ate'), went:en('c0180','went'), going:en('c0180','going'),
+      notUnderstand:en('c0017','I understand'), expensive:en('c0144','expensive'), evening:en('c0001','good evening'),
+      particleOut:k.speakingWords.toString().length>0 && !k.IDX.c0234 ? null : true
+    }; });
+  ok(g.uchiKanji && g.nihonKanji && g.ikutsuKanji,'the word asked is read in its own spelling: 家 is uchi, 日本 nihon, 幾つ ikutsu ('+JSON.stringify([g.uchiKanji,g.nihonKanji,g.ikutsuKanji])+')');
+  ok(g.shichiDigit && g.shichiKanji && g.hachiDigit,'a digit is tried in each reading: 7 is shichi as well as nana');
+  ok(!g.uchiWrong,'and a different word is still wrong: ie is not uchi');
+  ok(g.large && g.tasty && g.ate && g.went && g.going,'English said naturally passes: large, tasty, ate (eight), went, going ('+JSON.stringify([g.large,g.tasty,g.ate,g.went,g.going])+')');
+  ok(!g.notUnderstand && !g.expensive && !g.evening,'and the opposites still fail: I understand, expensive, good evening');
+
+  // the pool leaves out particles and grammar descriptions
+  const pool=await p.evaluate(()=>{ const k=window.__kl, now=Date.now();
+    ['c0234','c0119','c0189','c0113','c0041'].forEach(id=>{ k.S.items[id+'|j']={s:1,st:0,n:4,ef:2.0,iv:3,due:now+259200000,lapses:2,piv:0,seen:4,ok:1,df:6.0,sb:3.0,lr:now}; });
+    return k.speakingWords(); });
+  ok(pool.indexOf('c0234')<0 && pool.length===4,'a particle (wa, topic marker) is not asked as speech ('+pool.join(',')+')');
+
+  // flow: from a right answer to the next word listening, no dead time
+  await p.evaluate(()=>{ const k=window.__kl;
+    k.SP.ids=['c0119','c0189','c0113']; k.SP.dir={c0119:'e',c0189:'e',c0113:'e'};
+    k.SP.state={}; k.SP.tries={}; k.SP.cur=-1; k.SP.running=true; k.SP._orderFor=null; k.go('speak'); k.spAsk(0); });
+  await p.waitForFunction(()=>!!window.__recActive && !window.__kl.SP.locked[0],null,{timeout:20000});
+  const t0=await p.evaluate(()=>{ window.__recSay('うち'); return Date.now(); });
+  await p.waitForFunction(()=>window.__kl.SP.cur===1 && !window.__kl.SP.locked[1],null,{timeout:20000});
+  const gap=await p.evaluate(t=>({ms:Date.now()-t, guard:window.__kl.SP.guardUntil-Date.now()}), t0);
+  // speech that starts as the word appears is heard: only a result that
+  // arrives inside the first 0.65 s (the tail of the last answer) is dropped,
+  // and no answer to a new word can be finished that fast
+  ok(gap.ms<800 && gap.guard<=700,'from a right answer to the next word listening takes under 0.8 s ('+gap.ms+' ms; it was 1.4 to 4.5 s)');
+  // a wrong try: what was heard stays, a hint comes up, the mic is not restarted
+  const starts0=await p.evaluate(()=>window.__recStarts);
+  await p.evaluate(()=>window.__recSay('ちいさい'));
+  await p.waitForFunction(()=>window.__kl.SP.state[1]==='bad',null,{timeout:20000});
+  await p.waitForTimeout(400);
+  const w1=await p.evaluate(()=>({heard:document.getElementById('spHeard').textContent, hint:document.getElementById('spHint').textContent,
+    self:!document.getElementById('spSelfBtn').hidden, prompt:document.getElementById('spPrompt').textContent, starts:window.__recStarts}));
+  ok(/heard/.test(w1.heard) && /Starts with "o"/.test(w1.hint),'after a miss the heard line stays and a hint shows the first sound ('+w1.hint+')');
+  ok(w1.starts===starts0,'the retry does not restart the mic ('+starts0+' then '+w1.starts+')');
+  ok(w1.self,'"I said it right" is offered after a miss');
+  await p.evaluate(()=>window.__recSay('おおい'));
+  await p.waitForFunction(()=>(window.__kl.SP.tries[1]||0)===2,null,{timeout:20000});
+  const h2=await p.evaluate(()=>document.getElementById('spHint').textContent);
+  ok(/"ooki\.\.\."/.test(h2) || /ooki/.test(h2),'the second hint gives all but the last sound ('+h2+')');
+  // his own call
+  await p.click('#spSelfBtn');
+  await p.waitForFunction(()=>window.__kl.SP.state[1]==='good',null,{timeout:20000});
+  const sf=await p.evaluate(()=>({self:window.__kl.SP.self[1], rec:window.__kl.S.spoken.c0189,
+    tile:document.querySelector('#spTiles .sptile[data-i="1"]').className}));
+  ok(sf.self && sf.rec && sf.rec.ok===1 && /s-retry/.test(sf.tile),'marked right by him: a pass, recorded, shown yellow not green ('+sf.tile+')');
+  // Show after a miss still records the miss
+  await p.waitForFunction(()=>window.__kl.SP.cur===2 && !window.__kl.SP.locked[2],null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('まずい'));
+  await p.waitForFunction(()=>window.__kl.SP.state[2]==='bad',null,{timeout:20000});
+  await p.click('#spShowBtn');
+  await p.waitForTimeout(200);
+  const sh=await p.evaluate(()=>window.__kl.S.spoken.c0113);
+  ok(sh && sh.miss && !sh.ok,'Show answer after a wrong try still counts the miss ('+JSON.stringify(sh)+')');
+  const cues=await p.evaluate(()=>window.__cues.length);
+  ok(cues>=6,'sound cues play for turns, passes and misses ('+cues+' tones)');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+
+console.log('\n12. the speaking screen and its finish fit one screen, no scrolling (10 Oct)');
+for(const [w,h] of [[375,580],[393,759]]){
+  const ctx=await b.newContext({viewport:{width:w,height:h}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  const fits=()=>p.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+1);
+  await p.evaluate(()=>{ document.getElementById('tabs').classList.add('hide'); const k=__kl;
+    k.SP.ids=['c0189','c0113','c0119','c0001','c0041','c0180','c0144','c0360','c0672','c1761','c0017','c0034'];
+    k.SP.dir={}; k.SP.ids.forEach((x,i)=>k.SP.dir[x]=i<6?'e':'j');
+    k.SP.state={}; k.SP.tries={}; k.SP.cur=-1; k.SP.running=true; k.SP._orderFor=null; k.go('speak'); k.spAsk(0); });
+  await p.waitForFunction(()=>!!window.__recActive && !window.__kl.SP.locked[0],null,{timeout:20000});
+  ok(await fits(),'at '+w+'x'+h+' a word on screen fits');
+  await p.evaluate(()=>window.__recSay('ちいさい'));
+  await p.waitForFunction(()=>window.__kl.SP.state[0]==='bad',null,{timeout:20000});
+  ok(await fits(),'at '+w+'x'+h+' a miss with its hint and three buttons fits');
+  await p.evaluate(()=>{ const k=__kl; for(let i=0;i<12;i++){ const m=i%3===0; k.SP.state[i]=m?'bad':'good'; k.SP.tries[i]=m?3:1;
+    k.SP.verdict[i]=m?'missed':'good'; k.SP.grade[i]=m?0:100; k.SP.heard[i]='x'; } k.spAsk(99); });
+  await p.waitForFunction(()=>!document.getElementById('spDone').hidden,null,{timeout:20000});
+  ok(await fits(),'at '+w+'x'+h+' the finish screen with four misses fits; its list scrolls inside');
+  await p.click('#spAllBtn');
+  ok(await fits(),'and still fits with the full list open');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+
+console.log('\n13. the audit of 10 Oct: no false passes, and the round cannot be knocked over');
+{
+  const ctx=await b.newContext({viewport:{width:393,height:852}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  const EN=[['to win','to ride',0],['to lose','to go',0],['to give','to take',0],['to like','to hate',0],['sea','saw',0],['meat','met',0],
+    ['right','wrote',0],['here','heard',0],['new','news',0],['father','mother',0],['next week','last week',0],['seventy','seventeen',0],
+    ['eighty','eighteen',0],['north','south',0],['man','woman',0],['easy, not difficult','not easy',0],['a little','small',0],
+    ['firm, hard','difficult',0],['one','one hundred',0],['four','for example',0],['is / am / are (polite)','was',0],
+    ['understood / I see','to understand',0],['disliked, hated','hat',0],['bus','boss',0],
+    ['to eat','ate',1],['eight','ate',1],['to eat','eating',1],['to go','went',1],['to go','going',1],['to come','coming',1],
+    ['big, large','huge',1],['right','write',1],['two','to',1],['to understand','understood',1],["I don't understand",'I do not understand',1],
+    ['excuse me / sorry / thank you',"I'm sorry",1],['big','it is big',1],['one hundred','100',1],['station','the station',1]];
+  const en=await p.evaluate(cs=>cs.filter(([t,h,w])=>(window.__kl.enGrade(t,[h]).sim>=0.6)!==!!w).map(c=>c.join(' | ')), EN);
+  ok(en.length===0,'English: '+EN.length+' cases, opposites and look-alikes fail, natural answers pass'+(en.length?' (wrong: '+en.join('; ')+')':''));
+  const JA=[['じゅうはち','17',0],['じゅうはち','18',1],['はちじゅう','70',0],['ろくじゅう','90',0],['じゅうろく','19',0],['じゅうしょ','14',0],
+    ['おじいさん','おじさん',0],['おじさん','おじいさん',0],['おばあさん','おばさん',0],['きって','きて',0],
+    ['おじいさん','おじーさん',1],['コーヒー','こうひい',1],['こんにちは','今日は',1],['こんにちは','こんにちわ',1],['しち','7',1],['いくつ','幾つ',1]];
+  const ja=await p.evaluate(cs=>cs.filter(([t,h,w])=>(window.__kl.spGradeJa(t,[h]).sim>=0.62)!==!!w).map(c=>c.join(' | ')), JA);
+  ok(ja.length===0,'Japanese: '+JA.length+' cases, wrong numbers and long-vowel pairs fail, spellings of the right word pass'+(ja.length?' (wrong: '+ja.join('; ')+')':''));
+
+  // Skip tapped in the moment after a right answer does not undo it
+  await p.evaluate(()=>{ const k=window.__kl;
+    k.SP.ids=['c0119','c0189']; k.SP.dir={c0119:'e',c0189:'e'};
+    k.SP.state={}; k.SP.tries={}; k.SP.cur=-1; k.SP.running=true; k.SP._orderFor=null; k.go('speak'); k.spAsk(0); });
+  await p.waitForFunction(()=>!!window.__recActive && !window.__kl.SP.locked[0],null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('うち'));
+  await p.waitForFunction(()=>window.__kl.SP.state[0]==='good',null,{timeout:20000});
+  await p.click('#spSkipBtn');
+  const sk=await p.evaluate(()=>({st:window.__kl.SP.state[0], order:window.__kl.SP.order.slice()}));
+  ok(sk.st==='good' && sk.order.length===2,'Skip in the beat after a right answer leaves it right ('+JSON.stringify(sk)+')');
+  // "I said it right" after the reveal turns the stored miss into his pass
+  await p.waitForFunction(()=>window.__kl.SP.cur===1 && !window.__kl.SP.locked[1],null,{timeout:20000});
+  for(let n=0;n<3;n++){
+    await p.evaluate(()=>window.__recSay('まずい'));
+    await p.waitForFunction(m=>(window.__kl.SP.tries[1]||0)===m,n+1,{timeout:20000});
+  }
+  await p.click('#spSelfBtn');
+  const sr=await p.evaluate(()=>window.__kl.S.spoken.c0189);
+  ok(sr && sr.ok===1 && sr.self===1 && sr.okAt>=sr.miss,'"I said it right" after the reveal records his pass over the miss ('+JSON.stringify(sr)+')');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+{
+  // a blocked mic: the tap fallback grades the word
+  const ctx=await b.newContext({viewport:{width:393,height:852}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  await p.evaluate(()=>{ const k=window.__kl;
+    k.SP.ids=['c0119','c0189']; k.SP.dir={c0119:'e',c0189:'e'};
+    k.SP.state={}; k.SP.tries={}; k.SP.cur=-1; k.SP.running=true; k.SP._orderFor=null; k.SP.mic='blocked'; k.go('speak'); k.spAsk(0); });
+  await p.waitForFunction(()=>!document.getElementById('spMicBtn').hidden,null,{timeout:20000});
+  await p.click('#spMicBtn');
+  await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('うち'));
+  await p.waitForFunction(()=>window.__kl.SP.state[0]==='good',null,{timeout:20000});
+  ok(true,'with the mic blocked, the tap-to-speak fallback grades the word');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();
 }
