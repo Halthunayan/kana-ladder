@@ -177,7 +177,7 @@ function alsoRight(c){
 }
 
 var LEARN = [60, 600], RELEARN = [600], SHARDS = 8, LS_KEY = "kanaladder.v1";
-var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, cardAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto", spAudio:false, remindAt:"19:00"};
+var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, cardAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto", spAudio:false, spCues:true, remindAt:"19:00"};
 
 var S = {rev:0, items:{}, settings:Object.assign({},DEFAULTS),
   daily:{key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,packDone:0,extra:0,carSec:0,prac:0,noNew:false,buried:{},done:{},missed:{}}, hist:{}, streak:{cur:0,best:0,last:""}, life:{ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{}, checks:[], log:[], scenes:{}, want:[], spoken:{}};
@@ -5150,6 +5150,7 @@ function applySettings(){
   document.getElementById("setRet").value=Math.round((S.settings.retention||0.9)*100);
   var ss=document.getElementById("setSub"); if(ss) ss.textContent = S.settings.sched==="sm2" ? "SM-2" : "FSRS-6";
   var spa=document.getElementById("setSpAudio"); if(spa) spa.setAttribute("aria-checked",String(S.settings.spAudio===true));
+  var spc=document.getElementById("setSpCues"); if(spc) spc.setAttribute("aria-checked",String(S.settings.spCues!==false));
   var srm=document.getElementById("setRemind"); if(srm) srm.value=S.settings.remindAt||"19:00";
   renderSchedNote();
   if(S.settings.theme==="auto") document.documentElement.removeAttribute("data-theme");
@@ -5371,6 +5372,9 @@ function bindSettings(){
   var spa=document.getElementById("setSpAudio");
   if(spa) spa.addEventListener("click",function(){ S.settings.spAudio=!(S.settings.spAudio===true);
     this.setAttribute("aria-checked",String(S.settings.spAudio)); save(); });
+  var spcB=document.getElementById("setSpCues");
+  if(spcB) spcB.addEventListener("click",function(){ S.settings.spCues=(S.settings.spCues===false);
+    this.setAttribute("aria-checked",String(S.settings.spCues)); save(); });
   var srm=document.getElementById("setRemind");
   if(srm) srm.addEventListener("change",function(){ if(/^\d{2}:\d{2}$/.test(this.value)){ S.settings.remindAt=this.value; save(); } });
   var rmb=document.getElementById("remindBtn"); if(rmb) rmb.addEventListener("click",remindIcs);

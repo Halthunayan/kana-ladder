@@ -460,6 +460,18 @@ for _pp in _pairs:
         'pair %s differs in %r, not in its particles %s and %s' % (_pp['id'], _diff[0], _pa, _pb)
     assert _gloss(_sbyid[_sa]['en'])!=_gloss(_sbyid[_sb]['en']), 'pair %s has one English for two sentences' % _pp['id']
 pairs_src=_j.dumps(_pairs, ensure_ascii=False, separators=(',', ':'))
+# ---- the other spellings the phone writes for a word, for Speaking ----
+# A card with no kanji of its own (ikutsu, nihon, ...) still comes back from
+# the recogniser in kanji (幾つ, 日本), which the reading table cannot convert,
+# so a right answer scored as a miss. Each entry is keyed by a card's kana and
+# was checked against OpenJTalk's reading when it was written (10 Oct 2026).
+# Speaking applies an entry only when that card is the one being asked.
+_asr=_j.load(open(R('deck','asr_spellings.json'),encoding='utf-8'))
+_dk={c['kana'] for c in _d}
+for _k,_v in _asr.items():
+    assert _k in _dk, 'asr_spellings.json names %s, which is no card' % _k
+    assert _v and all(_x and _x!=_k for _x in _v), 'asr_spellings.json entry %s is empty or repeats the kana' % _k
+asr_src=_j.dumps(_asr, ensure_ascii=False, separators=(',', ':'))
 print('particle pairs: %d' % len(_pairs))
 
 # ---- guard: house style of romaji and English (council item 54) ----
@@ -527,6 +539,7 @@ tail=('\n<script type="application/json" id="deck-data">'+deck+'</script>'
       '\n<script type="application/json" id="scenes-data">'+scenes_src+'</script>'
       '\n<script type="application/json" id="pairs-data">'+pairs_src+'</script>'
       '\n<script type="application/json" id="kanji-data">'+kanji_src+'</script>'
+      '\n<script type="application/json" id="asr-data">'+asr_src+'</script>'
       '\n<script>\n'+js+'\n</script>\n')
 
 # ---- PWA: complete standalone document ----

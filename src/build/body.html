@@ -165,15 +165,18 @@
     <div class="sptiles" id="spTiles"></div>
     <div id="spPeek" class="sppeek" hidden></div>
     <div id="spStage">
-      <span class="chip dir-j" id="spDirChip">EN &rarr; JP, say it</span>
+      <span class="chip dir-j" id="spDirChip">Say it in Japanese</span>
       <div class="spprompt" id="spPrompt"></div>
       <div class="spstate" id="spState"></div>
       <div class="spheard" id="spHeard"></div>
+      <div class="sphint" id="spHint"></div>
       <button class="btn btn-ghost scmic" id="spMicBtn" hidden>Tap, then speak</button>
       <div class="scacts scacts-inline">
         <button class="btn btn-ghost" id="spShowBtn">Show answer</button>
         <button class="btn btn-ghost" id="spSkipBtn">Skip</button>
+        <button class="btn btn-ghost" id="spSelfBtn" hidden>I said it right</button>
       </div>
+      <p class="fine spvoice">Hands-free: say "skip" or "show me".</p>
       <button class="btn btn-ghost scstop" id="spStop">Stop</button>
     </div>
     <div id="spDone" hidden>
@@ -470,6 +473,10 @@
     <div class="opt">
       <div><div class="t">Audio prompts in Speaking</div><div class="d">Plays each prompt and the answer, so it works without looking.</div></div>
       <button class="sw" id="setSpAudio" role="switch" aria-checked="false" aria-label="Audio prompts in Speaking"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Sound cues in Speaking</div><div class="d">A short tone for your turn, a right answer, a near miss and a miss.</div></div>
+      <button class="sw" id="setSpCues" role="switch" aria-checked="true" aria-label="Sound cues in Speaking"></button>
     </div>
     <div class="opt">
       <div><div class="t">Daily reminder</div><div class="d">Adds a repeating event with an alert to your calendar.</div></div>

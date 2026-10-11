@@ -590,7 +590,11 @@ button.drill:active{transform:scale(.98);background:var(--paper-2)}
 .scheard{min-height:40px}
 .scv{display:inline-block;font-size:14px;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid var(--rule)}
 .scv.good{color:var(--matcha);border-color:var(--matcha)}
-.scv.close{color:var(--ink-2)}
+.scv.close{color:var(--ohdo);border-color:var(--ohdo)}
+.sphint{font-size:15px;color:var(--ink-2);min-height:20px;font-weight:600}
+.sphint:empty{min-height:0}
+.spvoice{margin:6px 0 0;text-align:center}
+.spall{margin:8px 0}
 .scv.missed{color:var(--bad,#b3402d);border-color:currentColor}
 .scv.none{color:var(--ink-3)}
 .schrd{font-size:13px;color:var(--ink-3);margin-top:6px}
@@ -778,3 +782,37 @@ details.sec.foldsec[open] summary{margin-bottom:10px}
 .card.f6 .opts{grid-template-columns:1fr 1fr;max-width:none}
 .card.f6 .face .hint{display:none}
 .card.f7 .face .slowbtn{margin-top:4px;padding-top:4px;padding-bottom:4px}
+/* Speaking on one screen (10 Oct 2026): one thin row of tickets, the three
+   ways out side by side, and Back as the only way to leave */
+#s-speak .sptiles{grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;margin:2px 0 0}
+#s-speak .sptile{aspect-ratio:auto;height:16px;border-radius:4px}
+#spStage{gap:8px;padding:10px 0 4px;min-height:0}
+#spStage .scacts-inline{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);grid-template-columns:none;max-width:100%;gap:7px}
+#spStage .scacts-inline:has(> .btn[hidden]) > .btn:not([hidden]){grid-column:auto}
+#spStage .scacts-inline .btn{padding:10px 8px;font-size:13px}
+#spStop{display:none}
+.spvoice{font-size:12px}
+#spDone .scres{padding:8px 10px;gap:2px 10px}
+#spDone .scres .lbl{min-width:0}
+#spDone .scacts{position:sticky;bottom:0;background:var(--paper);padding:4px 0;margin-top:4px}
+#s-speak .scwrap{padding-bottom:6px}
+#spStage{gap:6px;padding-top:6px}
+#spDone h2{margin:8px 0 4px}
+#spDone .fine{margin:0 0 6px}
+#spDone .screslist{margin:6px 0}
+#spDone .scres{position:relative;padding-right:56px}
+#spDone .scres-g{position:absolute;right:11px;top:8px;margin:0}
+/* the list scrolls inside itself, so the page never does */
+.sprough{display:flex;flex-direction:column;gap:7px}
+.sprough[hidden]{display:none}
+#spAllList{display:flex;flex-direction:column;gap:7px}
+#spAllList[hidden]{display:none}
+#spDone .spall{padding:8px 12px;min-height:40px;margin:4px 0}
+#spPrompt .kana.long{font-size:26px}
+#spPrompt .kana.longer{font-size:21px}
+#s-speak .sptiles[hidden]{display:none}
+/* the finish fills what the screen has left and scrolls only its own list */
+#s-speak.screen{padding-bottom:max(8px, env(safe-area-inset-bottom))}
+#s-speak .scwrap:has(> #spDone:not([hidden])){display:flex;flex-direction:column;height:calc(100svh - max(8px, env(safe-area-inset-bottom)));box-sizing:border-box}
+#spDone:not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0}
+#spDone .screslist{flex:1;min-height:0;overflow-y:auto}
