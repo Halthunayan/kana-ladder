@@ -160,26 +160,47 @@
   <div class="scwrap">
     <div class="scbar">
       <button class="btn btn-ghost" id="spBack">Back</button>
+      <button class="btn btn-ghost spcmptg" id="spCmpToggle" aria-pressed="false">Compare: off</button>
       <span class="scprog" id="spProg"></span>
     </div>
     <div class="sptiles" id="spTiles"></div>
     <div id="spPeek" class="sppeek" hidden></div>
     <div id="spStage">
-      <span class="chip dir-j" id="spDirChip">EN &rarr; JP, say it</span>
+      <span class="chip dir-j" id="spDirChip">Say it in Japanese</span>
       <div class="spprompt" id="spPrompt"></div>
       <div class="spstate" id="spState"></div>
       <div class="spheard" id="spHeard"></div>
+      <div class="sphint" id="spHint"></div>
+      <div class="spcmp" id="spCmp" hidden>
+        <div class="spcmp-pitch" id="spCmpPitch"></div>
+        <div class="spcmp-row"><span class="lbl">Native</span><canvas id="spCmpNat"></canvas></div>
+        <div class="spcmp-row"><span class="lbl">You</span><canvas id="spCmpMine"></canvas></div>
+        <div class="fine spcmp-dur" id="spCmpDur"></div>
+        <div class="spstate" id="spCmpState"></div>
+        <div class="spcmp-acts">
+          <button class="btn btn-ghost" id="spCmpNatBtn">Native</button>
+          <button class="btn btn-ghost" id="spCmpMineBtn">Mine</button>
+          <button class="btn btn-ghost" id="spCmpAgain">Again</button>
+          <button class="btn" id="spCmpNext">Next</button>
+        </div>
+      </div>
       <button class="btn btn-ghost scmic" id="spMicBtn" hidden>Tap, then speak</button>
       <div class="scacts scacts-inline">
         <button class="btn btn-ghost" id="spShowBtn">Show answer</button>
         <button class="btn btn-ghost" id="spSkipBtn">Skip</button>
+        <button class="btn btn-ghost" id="spSelfBtn" hidden>I said it right</button>
       </div>
+      <p class="fine spvoice">Hands-free: say "skip" or "show me".</p>
       <button class="btn btn-ghost scstop" id="spStop">Stop</button>
     </div>
     <div id="spDone" hidden>
       <h2 id="spDoneHead"></h2>
       <p class="fine" id="spDoneSub"></p>
       <div class="screslist" id="spDoneList"></div>
+      <div class="splab">
+        <button class="btn btn-ghost" id="lpBtn">Length pairs</button>
+        <button class="btn btn-ghost" id="vcBtn">Weekly voice check</button>
+      </div>
       <div class="scacts">
         <button class="btn btn-ghost" id="spDoneBtn">Done</button>
         <button class="btn" id="spAgain">Again</button>
@@ -187,6 +208,60 @@
     </div>
   </div>
 </section>
+<section class="screen" id="s-pairs">
+  <div class="scwrap">
+    <div class="scbar">
+      <button class="btn btn-ghost" id="lpBack">Back</button>
+      <span class="scprog" id="lpProg"></span>
+    </div>
+    <div id="lpStage" class="lpstage">
+      <span class="chip dir-j">Long or short sound</span>
+      <p class="lpq" id="lpQ">Which did you hear?</p>
+      <div class="lpopts" id="lpOpts"></div>
+      <div class="lprow">
+        <button class="btn btn-ghost" id="lpReplay">Play again</button>
+        <button class="btn btn-ghost" id="lpSayBtn" hidden>Say it</button>
+      </div>
+      <div class="lpfb" id="lpFb"></div>
+      <div class="lpsay" id="lpSay" hidden>
+        <p class="fine">Now say it: <b id="lpSayWord"></b></p>
+        <div class="spstate" id="lpSayState"></div>
+      </div>
+      <button class="btn" id="lpNext">Next</button>
+    </div>
+    <div id="lpDone" hidden>
+      <h2 id="lpDoneHead"></h2>
+      <p class="fine" id="lpDoneSub"></p>
+      <div class="scacts">
+        <button class="btn btn-ghost" id="lpDoneBtn">Done</button>
+        <button class="btn" id="lpAgain">Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="s-vcheck">
+  <div class="scwrap">
+    <div class="scbar">
+      <button class="btn btn-ghost" id="vcBack">Back</button>
+      <span class="scprog" id="vcProg"></span>
+    </div>
+    <div id="vcStage" class="vcstage">
+      <span class="chip dir-j">Weekly voice check</span>
+      <p class="fine">The same phrases every week, kept on this phone, so you can hear yourself improve.</p>
+      <div class="vcphrase" id="vcPhrase"></div>
+      <div class="spstate" id="vcState"></div>
+      <button class="btn btn-ghost" id="vcSkip">Skip this one</button>
+    </div>
+    <div id="vcDone" hidden>
+      <h2>Your voice, week by week</h2>
+      <p class="fine" id="vcDoneSub"></p>
+      <div class="vclist" id="vcList"></div>
+      <div class="scacts vcacts"><button class="btn" id="vcDoneBtn">Done</button></div>
+    </div>
+  </div>
+</section>
+
 <section class="screen" id="s-car">
   <div class="carwrap">
     <div class="carbar">
@@ -470,6 +545,14 @@
     <div class="opt">
       <div><div class="t">Audio prompts in Speaking</div><div class="d">Plays each prompt and the answer, so it works without looking.</div></div>
       <button class="sw" id="setSpAudio" role="switch" aria-checked="false" aria-label="Audio prompts in Speaking"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Sound cues in Speaking</div><div class="d">A short tone for your turn, a right answer, a near miss and a miss.</div></div>
+      <button class="sw" id="setSpCues" role="switch" aria-checked="true" aria-label="Sound cues in Speaking"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Compare my voice in Speaking</div><div class="d">After each word you say in Japanese: the native clip, then your own take, drawn side by side.</div></div>
+      <button class="sw" id="setSpCompare" role="switch" aria-checked="false" aria-label="Compare my voice in Speaking"></button>
     </div>
     <div class="opt">
       <div><div class="t">Daily reminder</div><div class="d">Adds a repeating event with an alert to your calendar.</div></div>

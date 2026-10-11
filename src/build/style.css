@@ -590,7 +590,11 @@ button.drill:active{transform:scale(.98);background:var(--paper-2)}
 .scheard{min-height:40px}
 .scv{display:inline-block;font-size:14px;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid var(--rule)}
 .scv.good{color:var(--matcha);border-color:var(--matcha)}
-.scv.close{color:var(--ink-2)}
+.scv.close{color:var(--ohdo);border-color:var(--ohdo)}
+.sphint{font-size:15px;color:var(--ink-2);min-height:20px;font-weight:600}
+.sphint:empty{min-height:0}
+.spvoice{margin:6px 0 0;text-align:center}
+.spall{margin:8px 0}
 .scv.missed{color:var(--bad,#b3402d);border-color:currentColor}
 .scv.none{color:var(--ink-3)}
 .schrd{font-size:13px;color:var(--ink-3);margin-top:6px}
@@ -778,3 +782,93 @@ details.sec.foldsec[open] summary{margin-bottom:10px}
 .card.f6 .opts{grid-template-columns:1fr 1fr;max-width:none}
 .card.f6 .face .hint{display:none}
 .card.f7 .face .slowbtn{margin-top:4px;padding-top:4px;padding-bottom:4px}
+/* Speaking on one screen (10 Oct 2026): one thin row of tickets, the three
+   ways out side by side, and Back as the only way to leave */
+#s-speak .sptiles{grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;margin:2px 0 0}
+#s-speak .sptile{aspect-ratio:auto;height:16px;border-radius:4px}
+#spStage{gap:8px;padding:10px 0 4px;min-height:0}
+#spStage .scacts-inline{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);grid-template-columns:none;max-width:100%;gap:7px}
+#spStage .scacts-inline:has(> .btn[hidden]) > .btn:not([hidden]){grid-column:auto}
+#spStage .scacts-inline .btn{padding:10px 8px;font-size:13px}
+#spStop{display:none}
+.spvoice{font-size:12px}
+#spDone .scres{padding:8px 10px;gap:2px 10px}
+#spDone .scres .lbl{min-width:0}
+#spDone .scacts{position:sticky;bottom:0;background:var(--paper);padding:4px 0;margin-top:4px}
+#s-speak .scwrap{padding-bottom:6px}
+#spStage{gap:6px;padding-top:6px}
+#spDone h2{margin:8px 0 4px}
+#spDone .fine{margin:0 0 6px}
+#spDone .screslist{margin:6px 0}
+#spDone .scres{position:relative;padding-right:56px}
+#spDone .scres-g{position:absolute;right:11px;top:8px;margin:0}
+/* the list scrolls inside itself, so the page never does */
+.sprough{display:flex;flex-direction:column;gap:7px}
+.sprough[hidden]{display:none}
+#spAllList{display:flex;flex-direction:column;gap:7px}
+#spAllList[hidden]{display:none}
+#spDone .spall{padding:8px 12px;min-height:40px;margin:4px 0}
+#spPrompt .kana.long{font-size:26px}
+#spPrompt .kana.longer{font-size:21px}
+#s-speak .sptiles[hidden]{display:none}
+/* the finish fills what the screen has left and scrolls only its own list */
+#s-speak.screen{padding-bottom:max(8px, env(safe-area-inset-bottom))}
+#s-speak .scwrap:has(> #spDone:not([hidden])){display:flex;flex-direction:column;height:calc(100svh - max(8px, env(safe-area-inset-bottom)));box-sizing:border-box}
+#spDone:not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0}
+#spDone .screslist{flex:1;min-height:0;overflow-y:auto}
+/* pitch marks: a line above a high sound, below a low one, a step between */
+.pitch{display:inline-flex;gap:0;font-weight:700;font-size:16px;letter-spacing:.01em}
+.pm{padding:3px 2px 2px;border-top:2px solid transparent;border-bottom:2px solid transparent}
+.pm.hi{border-top-color:var(--ohdo)}
+.pm.lo{border-bottom-color:var(--ink-3)}
+.pm.st{border-left:2px solid var(--ink-3)}
+.pgap{display:inline-block;width:7px}
+.pm.pt{font-weight:500;color:var(--ink-3);opacity:.8}
+.pm.pt.hi{border-top-style:dashed}.pm.pt.lo{border-bottom-style:dashed}
+.sppitch{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
+.sppitch .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+/* compare my voice */
+.spcmptg{font-size:12.5px;padding:8px 12px}
+.spcmptg[aria-pressed="true"]{border-color:var(--ohdo);color:var(--ohdo)}
+.spcmp{width:100%;display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.spcmp-pitch{text-align:center}
+.spcmp-row{display:grid;grid-template-columns:54px 1fr;align-items:center;gap:8px}
+.spcmp-row .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);text-align:left}
+.spcmp-row canvas{width:100%;height:52px;background:var(--paper-2);border-radius:8px;display:block}
+.spcmp-dur{text-align:center;font-variant-numeric:tabular-nums}
+.spcmp-acts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.spcmp-acts .btn{padding:10px 6px;font-size:13px;min-height:42px}
+#spStage.cmp > #spHeard, #spStage.cmp > #spHint, #spStage.cmp > .scacts-inline, #spStage.cmp > .spvoice, #spStage.cmp > #spState{display:none}
+/* after the round: the two voice drills */
+.splab{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.splab .btn{padding:10px 8px;font-size:13px;min-height:42px}
+/* length pairs */
+.lpstage,.vcstage{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:8px 0}
+.lpq{font-size:18px;font-weight:600;margin:0}
+.lpopts{display:grid;grid-template-columns:1fr 1fr;gap:9px;width:100%}
+.lpopt{display:flex;flex-direction:column;gap:3px;padding:12px 8px;min-height:72px}
+.lpopt b{font-size:20px}
+.lpopt span{font-size:12.5px;color:var(--ink-2)}
+.lpopt.right{border-color:var(--matcha);color:var(--matcha)}
+.lpopt.wrong{border-color:var(--bad,#b3402d)}
+.lpopt.dim{opacity:.55}
+.lppair{display:flex;gap:10px;justify-content:center;align-items:center;margin-top:6px}
+.lpsay{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%}
+.lpsay p{margin:0}
+#s-pairs.screen,#s-vcheck.screen{padding-bottom:max(8px, env(safe-area-inset-bottom))}
+/* weekly voice check */
+.vcphrase .romaji{font-size:22px;font-weight:600;line-height:1.35;text-wrap:balance}
+.vclist{display:flex;flex-direction:column;gap:7px;overflow-y:auto;margin:6px 0;flex:1;min-height:0}
+.vcrow{display:flex;flex-direction:column;gap:6px;padding:9px 11px;border-radius:10px;background:var(--paper-2);text-align:left}
+.vcph{display:flex;flex-direction:column;gap:2px}
+.vcbtns{display:flex;gap:6px;flex-wrap:wrap}
+.vcbtns .btn{width:auto;padding:7px 12px;font-size:12.5px;min-height:36px}
+.lprow{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;width:100%}
+.lprow .btn{padding:10px 8px;min-height:42px}
+.lpstage{gap:8px}
+.lpopt{min-height:64px;padding:10px 8px}
+#s-vcheck .scwrap:has(> #vcDone:not([hidden])){display:flex;flex-direction:column;height:calc(100svh - max(8px, env(safe-area-inset-bottom)));box-sizing:border-box}
+#vcDone:not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0}
+#vcDone h2{margin:6px 0 2px}
+#vcDone .fine{margin:0}
+.vcacts{grid-template-columns:1fr;margin-top:6px}

@@ -84,7 +84,9 @@ console.log('\n2. Speaking and Scenes: a revealed answer said aloud cannot overw
   await p.evaluate(()=>{ const k=__kl; k.speakingStart(); k.SP.ids=[k.SP.ids[0],k.SP.ids[1]||k.SP.ids[0]]; k.SP.dir[k.SP.ids[0]]='e'; k.SP.cur=-1; k.spAsk(0); });
   const id=await p.evaluate(()=>__kl.SP.ids[0]);
   for(let n=0;n<3;n++){
-    await p.waitForFunction(()=>!!window.__recActive && /listening/.test(document.getElementById('spState').textContent),null,{timeout:20000});
+    // (since 10 Oct a result in the first quarter second after the word goes
+    // up is the tail of the answer before, so the test speaks after it)
+    await p.waitForFunction(()=>!!window.__recActive && /listening/.test(document.getElementById('spState').textContent) && Date.now()>=(__kl.SP.guardUntil||0),null,{timeout:20000});
     await p.evaluate(()=>window.__recSay('ぜんぜんちがう'));
     await p.waitForTimeout(n<2?1100:200);
   }

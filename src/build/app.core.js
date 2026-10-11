@@ -177,7 +177,7 @@ function alsoRight(c){
 }
 
 var LEARN = [60, 600], RELEARN = [600], SHARDS = 8, LS_KEY = "kanaladder.v1";
-var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, cardAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto", spAudio:false, remindAt:"19:00"};
+var DEFAULTS = {sched:"fsrs", retention:0.90, newPerDay:12, revCap:150, tripDate:"", reverse:"grad", softCap:true, separate:true, listen:true, consPerDay:"auto", sentGap:1, sentences:true, sentPerDay:4, conj:true, conjPerDay:2, speechRate:0.85, speechVary:true, jaVoice:"auto", autoPlay:true, car:true, carDir:"mix", carGap:4, carMin:0, enVoice:"auto", carAudio:true, cardAudio:true, carEcho:true, carSlow:true, carSent:true, carConj:true, carChecked:false, badge:true, typing:true, kanji:true, tts:true, theme:"auto", spAudio:false, spCues:true, spCompare:false, vcLast:"", remindAt:"19:00"};
 
 var S = {rev:0, items:{}, settings:Object.assign({},DEFAULTS),
   daily:{key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,packDone:0,extra:0,carSec:0,prac:0,noNew:false,buried:{},done:{},missed:{}}, hist:{}, streak:{cur:0,best:0,last:""}, life:{ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}, backup:{last:""}, notes:{}, susp:{}, pfail:{}, crep:{}, carSeen:{}, checks:[], log:[], scenes:{}, want:[], spoken:{}};
@@ -3425,7 +3425,8 @@ function audCtx(){
   }
   // iOS suspends a freshly built context until a user gesture wakes it; this
   // is a cheap no-op once it is already running.
-  if(AUD.ctx && AUD.ctx.state==="suspended"){ try{ AUD.ctx.resume(); }catch(e){} }
+  // iPhone also leaves it "interrupted" after a call or a recording
+  if(AUD.ctx && AUD.ctx.state!=="running" && AUD.ctx.state!=="closed"){ try{ AUD.ctx.resume(); }catch(e){} }
   return AUD.ctx;
 }
 (function(){
@@ -3491,6 +3492,18 @@ function audPlayBytesWA(bytes){
    call this one; both always ask for it at pb 1, so the element's
    pitch-preserving slowdown that audPlay still relies on elsewhere never
    comes up here. */
+/* the bytes of one clip from the library, for drawing and comparing it */
+function audClipBytes(key){
+  if(!audOn()) return Promise.resolve(null);
+  return audManifestReady().then(function(m){
+    if(!m) return null;
+    var sp=audSpriteFor(key); if(!sp) return null;
+    return audLoad(sp).then(function(s){
+      if(!s || !s.idx[key]) return null;
+      var r=s.idx[key]; return s.buf.slice(r[0], r[0]+r[1]);
+    });
+  }).catch(function(){ return null; });
+}
 function audPlayWA(key, alive){
   if(!audOn()) return Promise.resolve(false);
   if(alive && !alive()) return Promise.resolve(true);
@@ -5150,6 +5163,8 @@ function applySettings(){
   document.getElementById("setRet").value=Math.round((S.settings.retention||0.9)*100);
   var ss=document.getElementById("setSub"); if(ss) ss.textContent = S.settings.sched==="sm2" ? "SM-2" : "FSRS-6";
   var spa=document.getElementById("setSpAudio"); if(spa) spa.setAttribute("aria-checked",String(S.settings.spAudio===true));
+  var spc=document.getElementById("setSpCues"); if(spc) spc.setAttribute("aria-checked",String(S.settings.spCues!==false));
+  var spm=document.getElementById("setSpCompare"); if(spm) spm.setAttribute("aria-checked",String(S.settings.spCompare===true));
   var srm=document.getElementById("setRemind"); if(srm) srm.value=S.settings.remindAt||"19:00";
   renderSchedNote();
   if(S.settings.theme==="auto") document.documentElement.removeAttribute("data-theme");
@@ -5371,6 +5386,13 @@ function bindSettings(){
   var spa=document.getElementById("setSpAudio");
   if(spa) spa.addEventListener("click",function(){ S.settings.spAudio=!(S.settings.spAudio===true);
     this.setAttribute("aria-checked",String(S.settings.spAudio)); save(); });
+  var spmB=document.getElementById("setSpCompare");
+  if(spmB) spmB.addEventListener("click",function(){ S.settings.spCompare=!(S.settings.spCompare===true);
+    this.setAttribute("aria-checked",String(S.settings.spCompare)); save();
+    var tg=document.getElementById("spCmpToggle"); if(tg){ tg.setAttribute("aria-pressed",String(S.settings.spCompare)); tg.textContent=S.settings.spCompare?"Compare: on":"Compare: off"; } });
+  var spcB=document.getElementById("setSpCues");
+  if(spcB) spcB.addEventListener("click",function(){ S.settings.spCues=(S.settings.spCues===false);
+    this.setAttribute("aria-checked",String(S.settings.spCues)); save(); });
   var srm=document.getElementById("setRemind");
   if(srm) srm.addEventListener("change",function(){ if(/^\d{2}:\d{2}$/.test(this.value)){ S.settings.remindAt=this.value; save(); } });
   var rmb=document.getElementById("remindBtn"); if(rmb) rmb.addEventListener("click",remindIcs);
@@ -5599,7 +5621,7 @@ function storageReport(){
 /* ---------- shell ---------- */
 function go(name){
   if(SHEET) closeSheet();
-  ["home","review","browse","stats","set","car","check","scenes","speak"].forEach(function(n){
+  ["home","review","browse","stats","set","car","check","scenes","speak","pairs","vcheck"].forEach(function(n){
     document.getElementById("s-"+n).classList.toggle("on",n===name);
   });
   Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){
@@ -5676,7 +5698,7 @@ function bind(){
   setInterval(function(){ if(!Sess.on) render(); },60000);
 }
 
-loadLocal(); rollDay(); applySettings(); bind(); bindSettings(); bindCar(); bindScenes(); bindSpeaking(); render(); renderBrowse(); setSync("local"); storageReport(); ttsProbe(); initStorage();
+loadLocal(); rollDay(); applySettings(); bind(); bindSettings(); bindCar(); bindScenes(); bindSpeaking(); bindVoiceLab(); render(); renderBrowse(); setSync("local"); storageReport(); ttsProbe(); initStorage();
 /* Warm the manifest at boot so the first card does not pay for the round trip.
    It is one small network-first JSON, and audPlay no longer depends on anyone
    having done this, so a failure here costs nothing. */
@@ -5691,7 +5713,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, speakBase:speakBase, baseClipFor:baseClipFor, SCENES:SCENES, sceneReady:sceneReady, sceneGaps:sceneGaps, sceneGrade:sceneGrade, kanaKey:kanaKey, kanaToRomaji:kanaToRomaji, kanjiToKana:kanjiToKana, scenesStart:scenesStart, sceneOpen:sceneOpen, sceneRun:sceneRun, sceneWant:sceneWant, SC:SC, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      speakingWords:speakingWords, speakingStart:speakingStart, spAsk:spAsk, spGradeJa:spGradeJa, enGrade:enGrade, enAlts:enAlts, SP:SP, go:go,
+      speakingWords:speakingWords, speakingStart:speakingStart, spAsk:spAsk, vlMorae:vlMorae, vlMoraRomaji:vlMoraRomaji, vlPitchHtml:vlPitchHtml, vlAnalyse:vlAnalyse, vlCompare:vlCompare, lpStart:lpStart, LP:LP, vcStart:vcStart, VC:VC, vcAll:vcAll, vcWeek:vcWeek, audClipBytes:audClipBytes, PITCH:PITCH, LENPAIRS:LENPAIRS, lpNext:lpNext, spGradeJa:spGradeJa, enGrade:enGrade, enAlts:enAlts, SP:SP, go:go,
       micReport:micReport, MIC_LOG:MIC_LOG, listenOnce:listenOnce, micPrime:micPrime, isStandalone:isStandalone,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, ttsUsable:ttsUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audPlayWA:audPlayWA, audCtx:audCtx, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,
