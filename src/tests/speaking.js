@@ -610,6 +610,178 @@ console.log('\n13. the audit of 10 Oct: no false passes, and the round cannot be
   await ctx.close();
 }
 
+console.log('\n14. voice lab: pitch marks, compare my voice, length pairs, weekly voice check (10 Oct)');
+{
+  const b2=await chromium.launch({executablePath:'/opt/pw-browsers/chromium',
+    args:['--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream','--autoplay-policy=no-user-gesture-required']});
+  const ctx=await b2.newContext({viewport:{width:375,height:580}, permissions:['microphone']});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  const fits=()=>p.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+1);
+  const pt=await p.evaluate(()=>{ const k=__kl, I=k.IDX;
+    const marks=id=>Array.prototype.map.call(new DOMParser().parseFromString(k.vlPitchHtml(I[id]),'text/html').querySelectorAll('.pm:not(.pt)'),e=>e.classList.contains('hi')?'H':'L').join('');
+    return {n:Object.keys(k.PITCH).length, ikutsu:marks('c0360'), chop:marks('c0472'), bridge:marks('c0807'),
+      mo:k.vlMorae('きって'), ro:k.vlMoraRomaji(k.vlMorae('きって')).ro, mo2:k.vlMoraRomaji(k.vlMorae('コーヒー')).ro}; });
+  ok(pt.n>1780,'pitch marks for '+pt.n+' cards');
+  ok(pt.ikutsu==='HLL' && pt.chop==='HL' && pt.bridge==='LH','ikutsu is high then low; hashi chopsticks HL and bridge LH ('+pt.ikutsu+', '+pt.chop+', '+pt.bridge+')');
+  ok(pt.mo.join(',')==='き,っ,て' && pt.ro.join(',')==='ki,t,te' && pt.mo2.join(',')==='ko,o,hi,i','a small tsu and a long mark are sounds of their own (ki t te, ko o hi i)');
+
+  // compare my voice after a right answer
+  await p.evaluate(()=>{ document.getElementById('tabs').classList.add('hide'); const k=__kl; k.S.settings.spCompare=true;
+    k.SP.ids=['c0119','c0189']; k.SP.dir={c0119:'e',c0189:'e'}; k.SP.state={}; k.SP.tries={}; k.SP.cur=-1; k.SP.running=true; k.SP._orderFor=null; k.go('speak'); k.spAsk(0); });
+  await p.waitForFunction(()=>!!window.__recActive && !__kl.SP.locked[0],null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('うち'));
+  await p.waitForFunction(()=>/pitch/.test(document.getElementById('spHeard').textContent),null,{timeout:20000});
+  ok(true,'a right Japanese answer shows its pitch marks');
+  await p.waitForFunction(()=>!document.getElementById('spCmp').hidden,null,{timeout:20000});
+  const micOff=await p.evaluate(()=>!window.__recActive);
+  ok(micOff,'speech recognition is off while he records his own take');
+  await p.waitForFunction(()=>/Compare them|Nothing recorded/.test(document.getElementById('spCmpState').textContent),null,{timeout:20000});
+  const cm=await p.evaluate(()=>({dur:document.getElementById('spCmpDur').textContent, st:document.getElementById('spCmpState').textContent}));
+  ok(/Native \d/.test(cm.dur) && /You \d/.test(cm.dur),'the native clip and his take are both measured ('+cm.dur+')');
+  ok(await fits(),'the compare panel fits one screen at 375x580');
+  await p.waitForFunction(()=>__kl.SP.cur===1 && !__kl.SP.locked[1] && !!window.__recActive,null,{timeout:20000});
+  ok(true,'it moves on by itself and the mic comes back for the next word');
+  await p.evaluate(()=>{ __kl.S.settings.spCompare=false; __kl.SP.running=false; });
+
+  // length pairs
+  await p.evaluate(()=>__kl.lpStart());
+  await p.waitForFunction(()=>document.querySelectorAll('.lpopt').length===2,null,{timeout:20000});
+  ok(await fits(),'length pairs fit one screen');
+  const lp=await p.evaluate(()=>({t:__kl.LP.target.id, o:__kl.LP.other.id, tk:__kl.LP.target.kana, ok:__kl.ok}));
+  await p.click('.lpopt[data-id="'+lp.t+'"]');
+  const lp1=await p.evaluate(()=>({ok:__kl.LP.ok, fb:document.getElementById('lpFb').textContent, say:!document.getElementById('lpSayBtn').hidden}));
+  ok(lp1.ok===1 && /Right/.test(lp1.fb) && lp1.say,'picking the word heard scores it and offers to say it');
+  ok(await fits(),'and the feedback still fits');
+  await p.click('#lpSayBtn');
+  await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+  const otherKana=await p.evaluate(id=>__kl.IDX[id].kana, lp.o);
+  await p.evaluate(k=>window.__recSay(k), otherKana);
+  await p.waitForFunction(()=>__kl.LP.said===1,null,{timeout:20000});
+  ok(await p.evaluate(()=>__kl.LP.saidOk===0),'saying the other word of the pair is not accepted');
+  await p.click('#lpSayBtn');
+  await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+  await p.evaluate(k=>window.__recSay(k), lp.tk);
+  await p.waitForFunction(()=>__kl.LP.said===2,null,{timeout:20000});
+  ok(await p.evaluate(()=>__kl.LP.saidOk===1),'saying the word itself is');
+  for(let i=0;i<8;i++){ if(await p.evaluate(()=>!document.getElementById('lpStage').hidden)) await p.click('#lpNext'); }
+  await p.waitForFunction(()=>!document.getElementById('lpDone').hidden,null,{timeout:20000});
+  ok(/Heard right: 1 of 8/.test(await p.evaluate(()=>document.getElementById('lpDoneHead').textContent)),'the round ends with the score');
+
+  // weekly voice check
+  await p.evaluate(()=>__kl.vcStart());
+  await p.waitForFunction(()=>/Saved|Nothing/.test(document.getElementById('vcState').textContent),null,{timeout:30000});
+  for(let i=0;i<8;i++){ await p.evaluate(()=>{ if(!document.getElementById('vcStage').hidden) document.getElementById('vcSkip').click(); }); await p.waitForTimeout(120); }
+  await p.waitForFunction(()=>!document.getElementById('vcDone').hidden,null,{timeout:20000});
+  await p.waitForFunction(()=>document.querySelectorAll('.vcrow').length===8,null,{timeout:20000});
+  const vc=await p.evaluate(async()=>({takes:(await __kl.vcAll()).length, last:__kl.S.settings.vcLast, week:__kl.vcWeek()}));
+  ok(vc.takes>=1 && vc.last===vc.week,'a take is kept on the phone and the week is marked done ('+JSON.stringify(vc)+')');
+  ok(await fits(),'the week-by-week list fits one screen, scrolling inside itself');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await b2.close();
+}
+
+console.log('\n15. release 2 audit fixes: pitch data and romaji, microphone release, compare state, pairs, weekly check (11 Oct)');
+{
+  const b2=await chromium.launch({executablePath:'/opt/pw-browsers/chromium',
+    args:['--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream','--autoplay-policy=no-user-gesture-required']});
+  const ctx=await b2.newContext({viewport:{width:375,height:580}, permissions:['microphone']});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base({}));
+  await ctx.addInitScript(fakeRec);
+  // every microphone stream a recording opens (the level meter beside the
+  // recogniser has its own, plain {audio:true}), so a leak can be counted
+  await ctx.addInitScript(()=>{ window.__streams=[]; const md=navigator.mediaDevices; if(!md) return; const g=md.getUserMedia.bind(md);
+    md.getUserMedia=c=>new Promise((res,rej)=>setTimeout(()=>g(c).then(s=>{ if(c && c.audio && c.audio.echoCancellation!==undefined) window.__streams.push(s); res(s); },rej), window.__permDelay||0)); });
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  await p.goto('http://localhost:8100/index.html');
+  await p.waitForFunction(()=>window.__kl&&__kl.DECK.length>0,null,{timeout:20000});
+  const fits=()=>p.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+1);
+  const live=()=>p.evaluate(()=>window.__streams.reduce((n,s)=>n+s.getTracks().filter(t=>t.readyState==='live').length,0));
+
+  const px=await p.evaluate(()=>{ const k=__kl, I=k.IDX, doc=h=>new DOMParser().parseFromString(h,'text/html');
+    const ro=id=>Array.prototype.map.call(doc(k.vlPitchHtml(I[id])).querySelectorAll('.pm:not(.pt)'),e=>e.textContent).join('.');
+    const par=id=>{ const e=doc(k.vlPitchHtml(I[id])).querySelector('.pm.pt'); return e ? (e.classList.contains('hi')?'H':'L') : ''; };
+    const gaps=id=>doc(k.vlPitchHtml(I[id])).querySelectorAll('.pgap').length;
+    let raf=[], hh=[];
+    k.DECK.forEach(c=>{ const v=k.PITCH[c.id]; if(!v || / /.test(c.romaji.trim())) return; const pt=v.split('|')[0];
+      if(/HL+H/.test(pt)) raf.push(c.romaji); if(/^HH/.test(pt)) hh.push(c.romaji); });
+    return {toire:ro('c0345'), toireGaps:gaps('c0345'), konn:ro('c0000'), kicchin:ro('c0768'), check:ro('c1250'),
+      bridge:par('c0807'), chop:par('c0472'), mizu:par('c0101'), raf:raf, hh:hh,
+      eigo:k.PITCH[k.DECK.find(c=>c.romaji==='eigo').id], tanjoubi:k.PITCH[k.DECK.find(c=>c.romaji==='tanjoubi').id],
+      juusan:k.PITCH[k.DECK.find(c=>c.romaji==='juusan').id], sou:k.PITCH['c0015']}; });
+  ok(px.toire==='to.i.re.wa.do.ko.de.su.ka' && px.toireGaps===4,'pitch romaji follows the card: the particle reads wa, with a gap at each word ('+px.toire+', '+px.toireGaps+' gaps)');
+  ok(px.konn==='ko.n.ni.chi.wa' && px.kicchin==='ki.c.chi.n' && px.check==='che.k.ku.i.n','konnichiwa, kicchin and chekkuin are spelled as on the card ('+px.konn+', '+px.kicchin+', '+px.check+')');
+  ok(px.bridge==='L' && px.chop==='L' && px.mizu==='H','a particle mark after nouns: low after hashi, high after flat mizu');
+  ok(px.raf.length===0 && px.hh.length===0,'no single word rises again after a fall or starts high-high ('+px.raf.concat(px.hh).slice(0,5).join(', ')+')');
+  ok(px.eigo==='LHH|H' && px.tanjoubi==='LHHLL|L' && px.juusan==='HLLL|L' && px.sou==='HLLL','dictionary accents: eigo flat, tanjoubi falls after jo, juusan after ju, sou desu after so ('+[px.eigo,px.tanjoubi,px.juusan,px.sou].join(' ')+')');
+
+  // compare: Again tapped twice while a take is running opens one microphone only, and all are closed after
+  await p.evaluate(()=>{ document.getElementById('tabs').classList.add('hide'); const k=__kl; k.S.settings.spCompare=true;
+    k.SP.ids=['c0119','c0189','c0101']; k.SP.dir={c0119:'e',c0189:'e',c0101:'e'}; k.SP.state={}; k.SP.tries={}; k.SP.cur=-1; k.SP.running=true; k.SP._orderFor=null; k.go('speak'); k.spAsk(0); });
+  await p.waitForFunction(()=>!!window.__recActive && !__kl.SP.locked[0],null,{timeout:20000});
+  await p.evaluate(()=>window.__recSay('うち'));
+  await p.waitForFunction(()=>/Now you|Opening/.test(document.getElementById('spCmpState').textContent),null,{timeout:20000});
+  await p.evaluate(()=>{ document.getElementById('spCmpAgain').click(); document.getElementById('spCmpAgain').click(); });
+  await p.waitForTimeout(300);
+  ok(await live()<=1,'Again during a take does not open a second microphone ('+await live()+' live)');
+  await p.waitForFunction(()=>__kl.SP.cur===1 && !!window.__recActive,null,{timeout:25000});
+  ok(await live()===0,'after the compare, no microphone track is left open');
+
+  // leaving the app mid-compare: the recording stops, and on return the next word starts
+  await p.evaluate(()=>window.__recSay('おおきい'));
+  await p.waitForFunction(()=>__kl.SP._comparing && /Now you|Opening|Native/.test(document.getElementById('spCmpState').textContent),null,{timeout:20000});
+  await p.evaluate(()=>{ window.__vis='hidden'; Object.defineProperty(document,'visibilityState',{get:()=>window.__vis,configurable:true}); document.dispatchEvent(new Event('visibilitychange')); });
+  await p.waitForTimeout(400);
+  const hid=await p.evaluate(()=>({cmp:document.getElementById('spCmp').hidden}));
+  ok(hid.cmp && await live()===0,'hidden mid-compare: the panel closes and the microphone is released');
+  await p.evaluate(()=>{ window.__vis='visible'; document.dispatchEvent(new Event('visibilitychange')); });
+  await p.waitForFunction(()=>__kl.SP.cur===2 && !__kl.SP._comparing && !!window.__recActive,null,{timeout:20000});
+  ok(true,'back in the app, it goes on to the next word with the mic on');
+
+  // Back during the permission prompt: the microphone opened late is closed at once
+  await p.evaluate(()=>{ window.__permDelay=1500; window.__recSay('みず'); });
+  await p.waitForFunction(()=>__kl.SP._comparing,null,{timeout:20000});
+  await p.waitForFunction(()=>/Opening/.test(document.getElementById('spCmpState').textContent),null,{timeout:20000});
+  await p.evaluate(()=>document.getElementById('spBack').click());
+  await p.waitForTimeout(2200);
+  ok(await live()===0 && await p.evaluate(()=>!__kl.SP._comparing),'Back while the permission prompt is open: the late microphone is closed, compare state cleared');
+  await p.evaluate(()=>{ window.__permDelay=0; __kl.S.settings.spCompare=false; });
+
+  // length pairs: the answer's position never depends on which word is played
+  const lpOrder=await p.evaluate(()=>{ const k=__kl; k.lpStart(); let bad=[];
+    k.LENPAIRS.forEach(pr=>{ k.LP.round=[[pr[0],pr[1]],[pr[1],pr[0]]]; k.LP.i=-1; k.lpNext();
+      const o1=Array.prototype.map.call(document.querySelectorAll('.lpopt'),b=>b.dataset.id).join(); k.lpNext();
+      const o2=Array.prototype.map.call(document.querySelectorAll('.lpopt'),b=>b.dataset.id).join(); if(o1!==o2) bad.push(pr.join('/')); });
+    return bad; }).catch(e=>['err '+e.message]);
+  ok(lpOrder.length===0,'length pairs show both words in the same order whichever is played ('+lpOrder.join(', ')+')');
+  await p.evaluate(()=>{ const k=__kl; k.lpStart(); });
+  await p.waitForFunction(()=>document.querySelectorAll('.lpopt').length===2,null,{timeout:20000});
+  const lt=await p.evaluate(()=>({t:__kl.LP.target.id, o:__kl.IDX[__kl.LP.other.id].kana}));
+  await p.click('.lpopt[data-id="'+lt.t+'"]'); await p.click('#lpSayBtn');
+  await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+  await p.evaluate(k=>window.__recSay(k), lt.o);
+  await p.waitForFunction(()=>__kl.LP.said===1,null,{timeout:20000});
+  ok(await fits(),'the "Heard ..." line after saying the wrong word still fits 375x580');
+  await p.click('#lpSayBtn');
+  await p.waitForFunction(()=>!!window.__recActive,null,{timeout:20000});
+  await p.click('#lpBack');
+  await p.waitForTimeout(200);
+  ok(await p.evaluate(()=>!window.__recActive),'Back from length pairs while it listens turns the recogniser off');
+
+  // weekly check: skipping every phrase does not mark the week done
+  await p.evaluate(()=>{ __kl.S.settings.vcLast=''; __kl.vcStart(); });
+  for(let i=0;i<9;i++){ await p.evaluate(()=>{ if(!document.getElementById('vcStage').hidden) document.getElementById('vcSkip').click(); }); await p.waitForTimeout(60); }
+  await p.waitForFunction(()=>!document.getElementById('vcDone').hidden,null,{timeout:20000});
+  ok(await p.evaluate(()=>__kl.S.settings.vcLast===''),'a weekly check with every phrase skipped is not marked done');
+  ok(/Nothing saved/.test(await p.evaluate(()=>document.getElementById('vcDoneSub').textContent)),'and it says nothing was saved');
+  ok(await live()===0,'no microphone left open after the weekly check');
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await b2.close();
+}
+
 await b.close();
 console.log('\n'+(fails.length? 'FAILED: '+fails.length+'\n  '+fails.join('\n  ') : 'SPEAKING GRADES BOTH DIRECTIONS, NO CLICKS NEEDED'));
 process.exit(fails.length?1:0);
