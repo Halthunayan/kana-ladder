@@ -816,3 +816,59 @@ details.sec.foldsec[open] summary{margin-bottom:10px}
 #s-speak .scwrap:has(> #spDone:not([hidden])){display:flex;flex-direction:column;height:calc(100svh - max(8px, env(safe-area-inset-bottom)));box-sizing:border-box}
 #spDone:not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0}
 #spDone .screslist{flex:1;min-height:0;overflow-y:auto}
+/* pitch marks: a line above a high sound, below a low one, a step between */
+.pitch{display:inline-flex;gap:0;font-weight:700;font-size:16px;letter-spacing:.01em}
+.pm{padding:3px 2px 2px;border-top:2px solid transparent;border-bottom:2px solid transparent}
+.pm.hi{border-top-color:var(--ohdo)}
+.pm.lo{border-bottom-color:var(--ink-3)}
+.pm.st{border-left:2px solid var(--ink-3)}
+.pgap{display:inline-block;width:7px}
+.pm.pt{font-weight:500;color:var(--ink-3);opacity:.8}
+.pm.pt.hi{border-top-style:dashed}.pm.pt.lo{border-bottom-style:dashed}
+.sppitch{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
+.sppitch .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+/* compare my voice */
+.spcmptg{font-size:12.5px;padding:8px 12px}
+.spcmptg[aria-pressed="true"]{border-color:var(--ohdo);color:var(--ohdo)}
+.spcmp{width:100%;display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.spcmp-pitch{text-align:center}
+.spcmp-row{display:grid;grid-template-columns:54px 1fr;align-items:center;gap:8px}
+.spcmp-row .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);text-align:left}
+.spcmp-row canvas{width:100%;height:52px;background:var(--paper-2);border-radius:8px;display:block}
+.spcmp-dur{text-align:center;font-variant-numeric:tabular-nums}
+.spcmp-acts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.spcmp-acts .btn{padding:10px 6px;font-size:13px;min-height:42px}
+#spStage.cmp > #spHeard, #spStage.cmp > #spHint, #spStage.cmp > .scacts-inline, #spStage.cmp > .spvoice, #spStage.cmp > #spState{display:none}
+/* after the round: the two voice drills */
+.splab{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.splab .btn{padding:10px 8px;font-size:13px;min-height:42px}
+/* length pairs */
+.lpstage,.vcstage{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:8px 0}
+.lpq{font-size:18px;font-weight:600;margin:0}
+.lpopts{display:grid;grid-template-columns:1fr 1fr;gap:9px;width:100%}
+.lpopt{display:flex;flex-direction:column;gap:3px;padding:12px 8px;min-height:72px}
+.lpopt b{font-size:20px}
+.lpopt span{font-size:12.5px;color:var(--ink-2)}
+.lpopt.right{border-color:var(--matcha);color:var(--matcha)}
+.lpopt.wrong{border-color:var(--bad,#b3402d)}
+.lpopt.dim{opacity:.55}
+.lppair{display:flex;gap:10px;justify-content:center;align-items:center;margin-top:6px}
+.lpsay{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%}
+.lpsay p{margin:0}
+#s-pairs.screen,#s-vcheck.screen{padding-bottom:max(8px, env(safe-area-inset-bottom))}
+/* weekly voice check */
+.vcphrase .romaji{font-size:22px;font-weight:600;line-height:1.35;text-wrap:balance}
+.vclist{display:flex;flex-direction:column;gap:7px;overflow-y:auto;margin:6px 0;flex:1;min-height:0}
+.vcrow{display:flex;flex-direction:column;gap:6px;padding:9px 11px;border-radius:10px;background:var(--paper-2);text-align:left}
+.vcph{display:flex;flex-direction:column;gap:2px}
+.vcbtns{display:flex;gap:6px;flex-wrap:wrap}
+.vcbtns .btn{width:auto;padding:7px 12px;font-size:12.5px;min-height:36px}
+.lprow{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;width:100%}
+.lprow .btn{padding:10px 8px;min-height:42px}
+.lpstage{gap:8px}
+.lpopt{min-height:64px;padding:10px 8px}
+#s-vcheck .scwrap:has(> #vcDone:not([hidden])){display:flex;flex-direction:column;height:calc(100svh - max(8px, env(safe-area-inset-bottom)));box-sizing:border-box}
+#vcDone:not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0}
+#vcDone h2{margin:6px 0 2px}
+#vcDone .fine{margin:0}
+.vcacts{grid-template-columns:1fr;margin-top:6px}

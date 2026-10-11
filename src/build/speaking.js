@@ -685,6 +685,11 @@ function spAttempt(alts, fromTap){
     SP.state[i]="good"; spRenderTiles(); spCue("good");
     document.getElementById("spSelfBtn").hidden=true;
     document.getElementById("spState").textContent="";
+    if(dir==="e") document.getElementById("spHeard").insertAdjacentHTML("beforeend", vlPitchLine(c));
+    if(dir==="e" && vlCompareOn() && vlRecOk()){
+      wait(SP_GOOD_MS).then(function(){ if(gen===SP.gen) spCompareThen(c, gen, function(){ spNext(SP_GUARD_MS); }); });
+      return;
+    }
     // the end of a right answer can arrive as a second result: the next word
     // ignores anything in its first 0.65 s, so that tail is never its try
     spPlay(spAnswerKey(id,dir), gen).then(function(){ return wait(SP_GOOD_MS); }).then(function(){ if(gen===SP.gen) spNext(SP_GUARD_PASS_MS); });
@@ -698,12 +703,15 @@ function spAttempt(alts, fromTap){
     var reveal = dir==="j" ? c.en : (c.romaji||c.kana);
     document.getElementById("spHeard").innerHTML =
       '<span class="scv missed">Answer</span><div class="schrd">'+esc(reveal)+'</div>'+
+      (dir==="e" ? vlPitchLine(c) : "")+
       '<div class="schrd">you said <b>'+esc(SP.heard[i]||"nothing clear")+'</b></div>';
     document.getElementById("spHint").textContent="";
     document.getElementById("spState").textContent="";
     spPlay(spAnswerKey(id,dir), gen);
     SP._revealGen=gen;
-    setTimeout(function(){ if(gen===SP.gen){ spNextAfterReveal(); } }, REVEAL_MS);
+    setTimeout(function(){ if(gen!==SP.gen) return;
+      if(dir==="e" && vlCompareOn() && vlRecOk()) spCompareThen(c, gen, spNextAfterReveal);
+      else spNextAfterReveal(); }, REVEAL_MS);
     return;
   }
   /* a wrong try: what was heard stays on screen, a hint comes up, and the mic
@@ -715,6 +723,20 @@ function spAttempt(alts, fromTap){
   if(fromTap || !CONT.running){ document.getElementById("spMicBtn").hidden=false; return; }
   SP.guardUntil=Date.now()+SP_GUARD_MS;
   spArmQuiet(gen, i);
+}
+/* compare my voice, then go on: the stage makes room for the panel, the
+   mic is off while he records, and Back or Stop cancels it */
+function spCompareThen(c, gen, then){
+  var stage=document.getElementById("spStage"); stage.classList.add("cmp");
+  SP._comparing=true; SP._cmpResume=null;
+  var end=function(){
+    stage.classList.remove("cmp"); SP._comparing=false; SP._cmpEnd=null;
+    // a short gap so the recogniser does not start on a microphone that
+    // the recording has only just let go of (iPhone)
+    if(gen===SP.gen && SP.running) wait(300).then(function(){ if(gen===SP.gen && SP.running) then(); });
+  };
+  SP._cmpEnd=end;
+  vlCompare(c, end);
 }
 /* after a reveal the next word waits a little longer before it listens, so
    the answer he says back to the reveal is not taken as its first try */
@@ -817,7 +839,7 @@ function spShowTap(){
   var id=SP.ids[i], c=spCard(id), dir=SP.dir[id];
   var gen=spGiveUp("shown"); if(gen==null) return;
   var shown = dir==="j" ? c.en : c.romaji;
-  document.getElementById("spHeard").innerHTML='<span class="scv none">Answer</span><div class="schrd">'+esc(shown||"")+'</div>';
+  document.getElementById("spHeard").innerHTML='<span class="scv none">Answer</span><div class="schrd">'+esc(shown||"")+'</div>'+(dir==="e" ? vlPitchLine(c) : "");
   spPlay(spAnswerKey(id,dir), gen);
   setTimeout(function(){ if(gen===SP.gen) spNextAfterReveal(); }, 1400);
 }
@@ -863,6 +885,7 @@ function speakingStart(){
   SP.tries={}; SP.heard={}; SP.grade={}; SP.verdict={}; SP.reason={}; SP.locked={}; SP._failId=null;
   SP.recorded={}; SP.self={}; SP.review={}; SP.inReview=false; SP.order=[]; SP.pos=-1; SP._revealGen=null;
   SP.firstState={}; SP._pendingAsk=null; SP._reviewIntro=false;
+  SP._comparing=false; SP._cmpEnd=null; SP._cmpResume=null;
   for(var i=0;i<ids.length;i++){ var cc=IDX[ids[i]];
     /* one-way cards (patterns, staff phrases) are never asked from English,
        and with audio prompts on a card whose English is shared with another
@@ -873,6 +896,9 @@ function speakingStart(){
   // whole language block instead of reopening before every single word
   ids.sort(function(a,b){ return SP.dir[a]===SP.dir[b] ? 0 : (SP.dir[a]<SP.dir[b] ? -1 : 1); });
   SP.ids=ids; SP._orderFor=null;
+  var tg=document.getElementById("spCmpToggle");
+  if(tg){ tg.setAttribute("aria-pressed",String(S.settings.spCompare===true)); tg.textContent=S.settings.spCompare===true?"Compare: on":"Compare: off"; }
+  var vb=document.getElementById("vcBtn"); if(vb && typeof vcDue==="function") vb.textContent = vcDue() ? "Weekly voice check (due)" : "Weekly voice check";
   document.getElementById("spDone").hidden=true;
   document.getElementById("spStage").hidden=false;
   var tl=document.getElementById("spTiles"); if(tl) tl.hidden=false;
@@ -886,6 +912,10 @@ function spStop(){
   SP.gen++; SP.running=false; SP._contLang=null;
   contListenStop();
   audStop();
+  if(typeof vlCancel==="function") vlCancel();
+  SP._comparing=false; SP._cmpEnd=null; SP._cmpResume=null;
+  var cm=document.getElementById("spCmp"); if(cm) cm.hidden=true;
+  var stg=document.getElementById("spStage"); if(stg) stg.classList.remove("cmp");
 }
 function speakingLeave(){
   spStop();
@@ -905,11 +935,19 @@ function bindSpeaking(){
   var dn=document.getElementById("spDoneBtn"); if(dn) dn.addEventListener("click", speakingLeave);
   document.addEventListener("visibilitychange",function(){
     if(!SP.running) return;
-    if(document.visibilityState==="hidden"){ contListenStop(); SP._contLang=null; return; }
+    if(document.visibilityState==="hidden"){
+      contListenStop(); SP._contLang=null;
+      // leaving the app mid-compare: stop the recording, and on return go
+      // straight on to the next word
+      if(SP._comparing && SP._cmpEnd){ var ce=SP._cmpEnd; vlCancel(); var cm=document.getElementById("spCmp"); if(cm) cm.hidden=true; SP._cmpResume=ce; }
+      return;
+    }
+    if(SP._cmpResume){ var cr=SP._cmpResume; SP._cmpResume=null; cr(); return; }
     if(SP._pendingAsk){ var pa=SP._pendingAsk; SP._pendingAsk=null; spAsk(pa[0], pa[1]); return; }
     // back on the same word: the mic comes back, and what was on screen
     // (what was heard, the hint, "I said it right") stays
     if(SP.mic==="blocked"){ spBlocked(); return; }
+    if(SP._comparing) return;
     if(SP.cur>=0 && !SP.locked[SP.cur]){
       var dir=SP.dir[SP.ids[SP.cur]], lang = dir==="j" ? "en-US" : "ja-JP";
       SP._contLang=lang; SP.guardUntil=Date.now()+SP_GUARD_MS;
