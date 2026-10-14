@@ -147,12 +147,12 @@ function vlSession(type){ try{ if(navigator.audioSession) navigator.audioSession
    even when permission is granted only after he left. onLive runs once the
    microphone is open, so the "your turn" tone is heard only when it is
    really listening; recording starts just after the tone. */
-function vlRecord(ms, gen, onLive){
+function vlRecord(ms, gen, onLive, cons){
   return new Promise(function(res){
     if(!vlRecOk()){ res(null); return; }
     var stale=function(){ return gen!=null && gen!==VL.gen; };
     vlSession("play-and-record");
-    navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:false, autoGainControl:true}}).then(function(stream){
+    navigator.mediaDevices.getUserMedia({audio:cons || {echoCancellation:true, noiseSuppression:false, autoGainControl:true}}).then(function(stream){
       var stop=function(){ try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} if(VL.stream===stream) VL.stream=null; };
       if(stale()){ stop(); vlSession("auto"); res(null); return; }
       if(VL.stream && VL.stream!==stream){ try{ VL.stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} }

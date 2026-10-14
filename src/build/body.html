@@ -56,6 +56,10 @@
       <span class="pn">Speaking</span>
       <span class="pd">say back the words Practice is working on, the phone grades you</span>
     </button>
+    <button class="pracbtn kana" id="kanaBtn">
+      <span class="pn">Kana course</span>
+      <span class="pd" id="kanaBtnSub">hiragana and katakana from the very first sound, slowly</span>
+    </button>
   </div>
 
   <div class="sec tripcard" id="tripCard">
@@ -258,6 +262,61 @@
       <p class="fine" id="vcDoneSub"></p>
       <div class="vclist" id="vcList"></div>
       <div class="scacts vcacts"><button class="btn" id="vcDoneBtn">Done</button></div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="s-kana">
+  <div class="scwrap kcwrap">
+    <div class="scbar">
+      <button class="btn btn-ghost" id="kcBack">Back</button>
+      <span class="scprog">Kana course</span>
+    </div>
+    <div class="kctabs" id="kcTabs">
+      <button data-tab="learn" class="on" aria-pressed="true">Learn</button>
+      <button data-tab="lessons" aria-pressed="false">Lessons</button>
+      <button data-tab="progress" aria-pressed="false">Progress</button>
+    </div>
+    <div id="kcBody" class="kcbody"></div>
+  </div>
+</section>
+
+<section class="screen" id="s-klesson">
+  <div class="scwrap klwrap">
+    <div class="scbar">
+      <button class="btn btn-ghost" id="klBack">Stop</button>
+      <span class="scprog" id="klProg"></span>
+    </div>
+    <div class="kltrack"><i id="klBar"></i></div>
+    <div id="klStage" class="klstage">
+      <div id="klBody" class="klbody"></div>
+      <div id="klFoot" class="klfoot"></div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="s-krec">
+  <div class="scwrap krwrap">
+    <div class="scbar">
+      <button class="btn btn-ghost" id="krBack">Back</button>
+      <span class="scprog" id="krProg"></span>
+    </div>
+    <p class="fine krhelp">For a native speaker of standard Japanese. A quiet room, the phone a hand's width from your mouth. Say each sound once, clearly, the way you would teach it.</p>
+    <div class="krcard" id="krCard"></div>
+    <div class="spstate" id="krState"></div>
+    <div class="krrow">
+      <button class="btn btn-ghost" id="krPrev">Back one</button>
+      <button class="btn" id="krRec">Record</button>
+      <button class="btn btn-ghost" id="krNext">Skip</button>
+    </div>
+    <div class="krrow">
+      <button class="btn btn-ghost" id="krPlay">Play</button>
+      <button class="btn" id="krKeep" hidden>Keep</button>
+    </div>
+    <div class="krgrid" id="krGrid"></div>
+    <div class="krexp">
+      <input type="text" id="krName" placeholder="Your name (optional)" aria-label="Your name">
+      <button class="btn btn-ghost" id="krExport">Export the recordings</button>
     </div>
   </div>
 </section>
@@ -553,6 +612,10 @@
     <div class="opt">
       <div><div class="t">Compare my voice in Speaking</div><div class="d">After each word you say in Japanese: the native clip, then your own take, drawn side by side.</div></div>
       <button class="sw" id="setSpCompare" role="switch" aria-checked="false" aria-label="Compare my voice in Speaking"></button>
+    </div>
+    <div class="opt">
+      <div><div class="t">Kana voice recordings</div><div class="d">For a native speaker: record every kana sound once, then send the file. The course plays single kana only from these.</div></div>
+      <button class="btn btn-ghost" id="krecBtn" style="width:auto">Open</button>
     </div>
     <div class="opt">
       <div><div class="t">Daily reminder</div><div class="d">Adds a repeating event with an alert to your calendar.</div></div>

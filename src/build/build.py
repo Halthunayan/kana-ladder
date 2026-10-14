@@ -22,7 +22,12 @@ assert js.count(_boot)==1, 'the boot line moved; scenes.js needs a place inside 
 # the length-pair drill and the weekly voice check) borrows from both.
 js=js.replace(_boot, open(B+'scenes.js',encoding='utf-8').read()+'\n'+
                       open(B+'speaking.js',encoding='utf-8').read()+'\n'+
-                      open(B+'voicelab.js',encoding='utf-8').read()+'\n'+_boot, 1)
+                      open(B+'voicelab.js',encoding='utf-8').read()+'\n'+
+                      open(B+'kanacourse.js',encoding='utf-8').read()+'\n'+
+                      open(B+'kanarec.js',encoding='utf-8').read()+'\n'+_boot, 1)
+# kanacourse.js and kanarec.js (14 Oct 2026: the hiragana and katakana course
+# and the recording studio for its native voice) use the speaking grader, the
+# recorder in voicelab.js and the shared scheduler, so they come last.
 scenes_src=open(R('scenes','scenes.json'),encoding='utf-8').read()
 _audio_ok = os.path.exists(R('pwa','audio','v1','manifest.json'))
 js=js.replace('__AUDIO_SHIPPED__', 'true' if _audio_ok else 'false')
@@ -507,6 +512,42 @@ _pairs_len=_j.load(open(R('deck','length_pairs.json'),encoding='utf-8'))
 for _p in _pairs_len:
     assert len(_p)==2 and all(_x in _byk for _x in _p), 'length_pairs.json has a bad pair %r' % (_p,)
 lenpairs_src=_j.dumps(_pairs_len, separators=(',', ':'))
+# ---- the kana course (tools/kana_course.py) and its memory hooks ----
+# Refused: a lesson naming a sound that does not exist, a reading word that is
+# not a deck card, a basic kana without a hook in either script, a hook with
+# Japanese script in it (he cannot read it), and any em dash. A sound with
+# two spellings shares audio with the one it is said as, which must exist.
+_kc=_j.load(open(R('deck','kana_course.json'),encoding='utf-8'))
+_kh=_j.load(open(R('deck','kana_hooks.json'),encoding='utf-8'))
+_snd=_kc['sounds']
+for _sid,_x in _snd.items():
+    assert _x['say'] in _snd, 'kana_course: %s is said as %s, which is no sound' % (_sid,_x['say'])
+    assert _x['k'] and _x['r'] and _re.fullmatch(r'[a-z]+', _x['r']), 'kana_course: sound %s is incomplete' % _sid
+for _L in _kc['lessons']:
+    for _sid in _L['new']: assert _sid in _snd, 'kana_course lesson %s names %s' % (_L['id'],_sid)
+    for _w in _L.get('words',[]): assert _w in _byk, 'kana_course lesson %s reads %s, which is no card' % (_L['id'],_w)
+    for _sid,_w in (_L.get('ex') or {}).items(): assert _w is None or _w in _byk, 'kana_course lesson %s example %s' % (_L['id'],_w)
+_seen_new={}
+for _L in _kc['lessons']:
+    for _sid in _L['new']:
+        assert (_L['s'],_sid) not in _seen_new, 'kana_course: %s %s is taught twice' % (_L['s'],_sid); _seen_new[(_L['s'],_sid)]=1
+for _sc in ('h','k'):
+    for _sid,_x in _snd.items():
+        if _x['g']=='base': assert _kh[_sc].get(_sid), 'kana_hooks: no %s hook for %s' % (_sc,_sid)
+def _walk(o):
+    if isinstance(o,str): yield o
+    elif isinstance(o,dict):
+        for v in o.values(): yield from _walk(v)
+    elif isinstance(o,list):
+        for v in o: yield from _walk(v)
+for _t in _walk(_kh):
+    assert not _re.search('[\u3040-\u30ff\u4e00-\u9fff]', _t), 'kana_hooks: Japanese script in %r' % _t
+    assert '\u2014' not in _t, 'kana_hooks: an em dash in %r' % _t
+for _L in _kc['lessons']:
+    assert '\u2014' not in _L['t']+_L.get('note',''), 'kana_course: an em dash in lesson %s' % _L['id']
+_kc['hooks']=_kh
+kana_src=_j.dumps(_kc, ensure_ascii=False, separators=(',', ':'))
+print('kana course: %d sounds, %d lessons, %d hooks' % (len(_snd), len(_kc['lessons']), len(_kh['h'])+len(_kh['k'])))
 print('particle pairs: %d' % len(_pairs))
 
 # ---- guard: house style of romaji and English (council item 54) ----
@@ -577,6 +618,7 @@ tail=('\n<script type="application/json" id="deck-data">'+deck+'</script>'
       '\n<script type="application/json" id="asr-data">'+asr_src+'</script>'
       '\n<script type="application/json" id="pitch-data">'+pitch_src+'</script>'
       '\n<script type="application/json" id="lenpairs-data">'+lenpairs_src+'</script>'
+      '\n<script type="application/json" id="kana-data">'+kana_src+'</script>'
       '\n<script>\n'+js+'\n</script>\n')
 
 # ---- PWA: complete standalone document ----
