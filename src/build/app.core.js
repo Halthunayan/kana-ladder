@@ -432,7 +432,7 @@ function unpackItem(a){
    The stamp lets the importer say so instead. */
 var SCHEMA=7;
 function packAll(){var it={}; for(var k in S.items) it[k]=packItem(S.items[k]);
-  return {schema:SCHEMA,rev:S.rev,settings:S.settings,daily:S.daily,hist:S.hist,streak:S.streak,life:S.life,backup:S.backup,notes:S.notes,susp:S.susp,pfail:S.pfail,crep:S.crep,carSeen:S.carSeen,checks:S.checks,log:S.log,scenes:S.scenes||{},want:S.want||[],spoken:S.spoken||{},items:it};}
+  return {schema:SCHEMA,rev:S.rev,settings:S.settings,daily:S.daily,hist:S.hist,streak:S.streak,life:S.life,backup:S.backup,notes:S.notes,susp:S.susp,pfail:S.pfail,crep:S.crep,carSeen:S.carSeen,checks:S.checks,log:S.log,scenes:S.scenes||{},want:S.want||[],spoken:S.spoken||{},kana:S.kana||{},items:it};}
 function applyBlob(b){
   if(!b) return;
   S.rev = b.rev||0;
@@ -445,7 +445,7 @@ function applyBlob(b){
   S.life = Object.assign({ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0},b.life||{});
   S.backup = Object.assign({last:""},b.backup||{});
   S.notes = b.notes||{}; S.susp = b.susp||{}; S.pfail = b.pfail||{}; S.crep = b.crep||{}; S.carSeen = b.carSeen||{};
-  S.scenes = b.scenes||{}; S.want = Array.isArray(b.want)? b.want : []; S.spoken = b.spoken||{};
+  S.scenes = b.scenes||{}; S.want = Array.isArray(b.want)? b.want : []; S.spoken = b.spoken||{}; S.kana = (b.kana && typeof b.kana==="object") ? b.kana : {};
   S.checks = Array.isArray(b.checks)? b.checks : [];
   S.log = Array.isArray(b.log) ? b.log : [];
   S.items = {}; var it=b.items||{};
@@ -710,7 +710,7 @@ function idbGet(){ return new Promise(function(res){ if(!IDB) return res(null);
 var SHARDS=8, Remote={kind:"none", db:null, dirty:{}, timer:null};
 function shardOf(key){var c=IDX[key.split("|")[0]]; return c?c._i%SHARDS:0;}
 function packShard(n){var o={}; for(var k in S.items){ if(shardOf(k)===n) o[k]=packItem(S.items[k]); } return o;}
-function packMeta(){return {rev:S.rev,settings:S.settings,daily:S.daily,hist:S.hist,streak:S.streak,life:S.life,backup:S.backup,notes:S.notes,susp:S.susp,pfail:S.pfail};}
+function packMeta(){return {rev:S.rev,settings:S.settings,daily:S.daily,hist:S.hist,streak:S.streak,life:S.life,backup:S.backup,notes:S.notes,susp:S.susp,pfail:S.pfail,kana:S.kana||{}};}
 function remoteQueue(){ if(Remote.kind!=="claude") return;
   if(Remote.timer) clearTimeout(Remote.timer);
   Remote.timer=setTimeout(remoteFlush,1400); }
@@ -742,7 +742,9 @@ function initStorage(){
         if(newer && !Sess.on && !DIRTY_SINCE_BOOT){
           var items={};
           for(var j=1;j<sn.length;j++){ if(sn[j].exists){ var m=sn[j].data().items||{}; for(var k in m) items[k]=m[k]; } }
-          applyBlob({rev:meta.rev,settings:meta.settings,daily:meta.daily,hist:meta.hist,streak:meta.streak,life:meta.life,backup:meta.backup,notes:meta.notes,susp:meta.susp,pfail:meta.pfail,items:items});
+          // what the remote copy does not carry is kept from this device, not wiped
+          applyBlob({rev:meta.rev,settings:meta.settings,daily:meta.daily,hist:meta.hist,streak:meta.streak,life:meta.life,backup:meta.backup,notes:meta.notes,susp:meta.susp,pfail:meta.pfail,items:items,
+            kana:meta.kana||S.kana, scenes:S.scenes, want:S.want, spoken:S.spoken});
           saveLocal(); applySettings(); render(); renderBrowse();
         } else if(S.rev>0 || Object.keys(S.items).length){ markAll(); remoteFlush(); }
         setSync("cloud");
@@ -3260,6 +3262,7 @@ function audSpriteFor(key){
   var cut=key.indexOf(":"); if(cut<0) return null;
   var kind=key.slice(0,cut), rest=key.slice(cut+1);
   if(kind==="p") return "p-000";
+  if(kind==="kj") return "k-000";   // the kana course's native recordings
   var id=rest.split(":")[0], c=IDX[id];
   if(!c || typeof c._i!=="number") return null;
   if(kind==="wj"||kind==="we") return "w-"+pad3(Math.floor(c._i/m.wPer));
@@ -4540,6 +4543,7 @@ function stateOf(it){
 }
 function render(){
   rollDay();
+  var kb=document.getElementById("kanaBtnSub"); if(kb && typeof kcHomeLine==="function"){ try{ kb.textContent=kcHomeLine(); }catch(e){} }
   scenePruneWant();
   var c=counts();
   setTile("tileNew",c.newN); setTile("tileLrn",c.lrnN); setTile("tileDue",c.dueN);
@@ -5457,7 +5461,7 @@ function bindSettings(){
   });
   document.getElementById("resetBtn").addEventListener("click",function(){
     if(!confirm("Erase all scheduling and start the deck from zero? This cannot be undone.")) return;
-    S.items={}; S.daily={key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,packDone:0,extra:0,carSec:0,prac:0,noNew:false,buried:{},done:{},missed:{}}; S.hist={}; S.notes={}; S.susp={}; S.pfail={}; S.log=[]; S.streak={cur:0,best:0,last:""}; S.life={ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}; S.spoken={}; S.scenes={}; S.want=[]; S.crep={}; S.checks=[];
+    S.items={}; S.daily={key:"",newDone:0,revDone:0,ans:0,ok:0,credit:0,sentDone:0,conjDone:0,consDone:0,packDone:0,extra:0,carSec:0,prac:0,noNew:false,buried:{},done:{},missed:{}}; S.hist={}; S.notes={}; S.susp={}; S.pfail={}; S.log=[]; S.streak={cur:0,best:0,last:""}; S.life={ans:0,ok:0,practice:0,carSec:0,carHeard:0,carSent:0}; S.spoken={}; S.kana={}; S.scenes={}; S.want=[]; S.crep={}; S.checks=[];
     markAll(); save(); render(); renderBrowse(); toast("Deck reset");
   });
 }
@@ -5621,7 +5625,7 @@ function storageReport(){
 /* ---------- shell ---------- */
 function go(name){
   if(SHEET) closeSheet();
-  ["home","review","browse","stats","set","car","check","scenes","speak","pairs","vcheck"].forEach(function(n){
+  ["home","review","browse","stats","set","car","check","scenes","speak","pairs","vcheck","kana","klesson","krec"].forEach(function(n){
     document.getElementById("s-"+n).classList.toggle("on",n===name);
   });
   Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){
@@ -5698,7 +5702,7 @@ function bind(){
   setInterval(function(){ if(!Sess.on) render(); },60000);
 }
 
-loadLocal(); rollDay(); applySettings(); bind(); bindSettings(); bindCar(); bindScenes(); bindSpeaking(); bindVoiceLab(); render(); renderBrowse(); setSync("local"); storageReport(); ttsProbe(); initStorage();
+loadLocal(); rollDay(); applySettings(); bind(); bindSettings(); bindCar(); bindScenes(); bindSpeaking(); bindVoiceLab(); bindKana(); render(); renderBrowse(); setSync("local"); storageReport(); ttsProbe(); initStorage();
 /* Warm the manifest at boot so the first card does not pay for the round trip.
    It is one small network-first JSON, and audPlay no longer depends on anyone
    having done this, so a failure here costs nothing. */
@@ -5713,7 +5717,7 @@ if("serviceWorker" in navigator){
       carResume:carResume, carFinish:carFinish, carMinutes:carMinutes, carDirection:carDirection,
       carGapMs:carGapMs, exampleFor:exampleFor, EXAMPLE:EXAMPLE, speakCard:speakCard, speakBase:speakBase, baseClipFor:baseClipFor, SCENES:SCENES, sceneReady:sceneReady, sceneGaps:sceneGaps, sceneGrade:sceneGrade, kanaKey:kanaKey, kanaToRomaji:kanaToRomaji, kanjiToKana:kanjiToKana, scenesStart:scenesStart, sceneOpen:sceneOpen, sceneRun:sceneRun, sceneWant:sceneWant, SC:SC, ttsReady:ttsReady, sayTextOf:sayTextOf, sayHtml:sayHtml, SIDX:SIDX, carSentence:carSentence, carConjPick:carConjPick, carReady:carReady,
       carHeardRecently:carHeardRecently, carPrune:carPrune, carLeave:carLeave,
-      speakingWords:speakingWords, speakingStart:speakingStart, spAsk:spAsk, vlMorae:vlMorae, vlMoraRomaji:vlMoraRomaji, vlPitchHtml:vlPitchHtml, vlAnalyse:vlAnalyse, vlCompare:vlCompare, lpStart:lpStart, LP:LP, vcStart:vcStart, VC:VC, vcAll:vcAll, vcWeek:vcWeek, audClipBytes:audClipBytes, PITCH:PITCH, LENPAIRS:LENPAIRS, lpNext:lpNext, spGradeJa:spGradeJa, enGrade:enGrade, enAlts:enAlts, SP:SP, go:go,
+      speakingWords:speakingWords, speakingStart:speakingStart, spAsk:spAsk, vlMorae:vlMorae, vlMoraRomaji:vlMoraRomaji, vlPitchHtml:vlPitchHtml, vlAnalyse:vlAnalyse, vlCompare:vlCompare, lpStart:lpStart, LP:LP, vcStart:vcStart, VC:VC, vcAll:vcAll, vcWeek:vcWeek, audClipBytes:audClipBytes, PITCH:PITCH, LENPAIRS:LENPAIRS, lpNext:lpNext, KC:KC, KCH:KCH, KR:KR, KV:KV, kcStart:kcStart, kcOpen:kcOpen, kcRecord:kcRecord, kcMastery:kcMastery, kcS:kcS, kcChoices:kcChoices, kcBuildLesson:kcBuildLesson, kcUnlocked:kcUnlocked, kcNextLesson:kcNextLesson, kcDueItems:kcDueItems, kcTaught:kcTaught, kcWeakness:kcWeakness, kcConfusions:kcConfusions, kcMutations:kcMutations, kcHasAudio:kcHasAudio, krecOpen:krecOpen, krecIds:krecIds, KREC:KREC, AUD:AUD, spGradeJa:spGradeJa, enGrade:enGrade, enAlts:enAlts, SP:SP, go:go,
       micReport:micReport, MIC_LOG:MIC_LOG, listenOnce:listenOnce, micPrime:micPrime, isStandalone:isStandalone,
       enVoice:enVoice, enRanked:enRanked, enScore:enScore, jaVoice:jaVoice, jaRanked:jaRanked, jaScore:jaScore, jaTop:jaTop, jaLabel:jaLabel, jaLabels:jaLabels, jaSampleText:jaSampleText, jaUsable:jaUsable, ttsUsable:ttsUsable, speakAt:speakAt, speechReport:speechReport, SPEECH_LOG:SPEECH_LOG, jaQuality:jaQuality, vId:vId, moraCount:moraCount,
       AUD:AUD, audPlay:audPlay, audPlayWA:audPlayWA, audCtx:audCtx, audHas:audHas, audLoad:audLoad, audSpriteFor:audSpriteFor,

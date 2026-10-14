@@ -145,6 +145,13 @@ jobs:
       - name: speaking grades both directions, no clicks needed
         run: node src/tests/speaking.js
 
+      # The kana course: lessons from the first three vowels, unlocked one by
+      # one; statistics and schedules per kana; no single kana voiced until
+      # the native recordings are installed; every screen on one page; and
+      # the recording studio the native speaker uses.
+      - name: the kana course teaches, tracks and waits for the native voice
+        run: node src/tests/kana_course.js
+
       # Twice in one day the app went silent in both languages while the
       # pre-rendered audio kept playing, and nine suites stayed green. Both
       # times the cause was code added to the speech path that called cancel
