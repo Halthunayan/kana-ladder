@@ -319,7 +319,8 @@ function kcShowIntro(){
     } else if(L.kind==="review"){
       h+='<p class="klnote fine">The '+esc(kcScriptName(L.s))+' met so far: your eight weakest always, the look-alikes side by side, a sample of the rest, then words to read.</p>';
     }
-    if(!kcAnyAudio()) h+='<p class="klnote fine">The single kana sounds arrive with the native speaker recordings; until then the course voices words only.</p>';
+    var mute=L.new.filter(function(sid){ return !kcHasAudio(sid); });
+    if(mute.length && L.new.length) h+='<p class="klnote fine">'+(mute.length===L.new.length ? 'These sounds are' : esc(mute.map(function(sid){ return kcSnd(sid).r; }).join(", "))+(mute.length===1 ? ' is' : ' are'))+' taught through words: no single-sound clip passed the accuracy checks.</p>';
   } else if(KR.mode==="due"){
     h+='<span class="chip dir-j">Kana review</span><h2 class="kltitle">'+(KR.steps.length-2)+' kana due</h2><p class="klnote">Each one is due because its memory is fading. Answer without rushing: being right decides when it comes back; speed only shows on the progress page.</p>';
   } else {
@@ -567,7 +568,7 @@ function kcLearnHtml(){
   if(wk.length) out+='<div class="klsum"><span class="lbl">Needs work</span>'+wk.map(function(o){ return '<span class="klchip"><b>'+esc(kcForm(o.s,o.sid))+'</b> '+esc(kcSnd(o.sid).r)+'</span>'; }).join("")+'</div>';
   var cf=kcConfusions("h").concat(kcConfusions("k").map(function(p){ p.k=1; return p; })).sort(function(a,b){ return b.n-a.n; })[0];
   if(cf){ var sc=cf.k ? "k" : "h"; out+='<p class="fine">Most mixed up: <b class="kjf">'+esc(kcForm(sc,cf.a))+'</b> '+esc(kcSnd(cf.a).r)+' answered as <b class="kjf">'+esc(kcForm(sc,cf.b))+'</b> '+esc(kcSnd(cf.b).r)+', '+cf.n+' time'+(cf.n===1?"":"s")+'</p>'; }
-  if(!kcAnyAudio() && !h.taught) out+='<p class="fine kcaud">Single kana sounds: waiting for the native speaker recordings.</p>';
+  if(!kcAnyAudio() && !h.taught) out+='<p class="fine kcaud">Single kana sounds are not installed yet; words carry the sound for now.</p>';
   return out;
 }
 function kcWeakList(s){
