@@ -639,11 +639,28 @@ def main():
             manifest['files'][sprite] = base
             manifest['sigs'][sprite] = sig
             done += len(items)
-            json.dump(manifest, open(os.path.join(OUT, 'manifest.partial.json'), 'w'),
-                      separators=(',', ':'))
+            json.dump(dict(manifest, **({'kana': old['kana']} if old.get('kana') else {})),
+                      open(os.path.join(OUT, 'manifest.partial.json'), 'w'), separators=(',', ':'))
             print('  %s  %d clips  %.1f MB  as %s  (%d/%d)' %
                   (sprite, len(index), off/1048576, base, done, total), flush=True)
 
+    # The kana course's native recordings (tools/kana_audio_import.py) are not
+    # rendered here; keep their sprite and their "kana" entry as they were.
+    for sp in (old.get('sprites') or {}):
+        if sp.startswith('k-'):
+            manifest['sprites'][sp] = old['sprites'][sp]
+            if sp in (old.get('files') or {}): manifest['files'][sp] = old['files'][sp]
+            if sp in (old.get('sigs') or {}): manifest['sigs'][sp] = old['sigs'][sp]
+    if old.get('kana'): manifest['kana'] = old['kana']
+    elif part.get('kana'): manifest['kana'] = part['kana']
+    # with no finished manifest to read, the kana sprite is found on disk
+    if not any(k.startswith('k-') for k in manifest['sprites']):
+        ks = sorted(f[:-5] for f in os.listdir(OUT) if f.startswith('k-000.') and f.endswith('.json'))
+        if ks and manifest.get('kana'):
+            base = ks[-1]
+            idx = json.load(open(os.path.join(OUT, base + '.json')))
+            manifest['sprites']['k-000'] = {'bytes': os.path.getsize(os.path.join(OUT, base + '.mp3')), 'clips': len(idx)}
+            manifest['files']['k-000'] = base; manifest['sigs']['k-000'] = 'native-' + base.split('.')[-1]
     json.dump(manifest, open(os.path.join(OUT, 'manifest.json'), 'w'),
               separators=(',', ':'))
     try:
@@ -655,7 +672,8 @@ def main():
         keep.add(b + '.mp3'); keep.add(b + '.json')
     dropped = 0
     for f in os.listdir(OUT):
-        if f not in keep:
+        # the kana course's native recordings are never this script's to delete
+        if f not in keep and not f.startswith('k-'):
             os.remove(os.path.join(OUT, f)); dropped += 1
     if fallbacks:
         json.dump(fallbacks, open(R('state', 'audio_fallbacks.json'), 'w'),
