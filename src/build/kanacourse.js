@@ -43,9 +43,26 @@ function kcAudioIds(){
 }
 function kcHasAudio(sid){ var ids=kcAudioIds(); return !!(ids && ids.indexOf(kcSnd(sid).say)>=0); }
 function kcAnyAudio(){ var ids=kcAudioIds(); return !!(ids && ids.length); }
+/* A single kana has no fallback voice, so it plays whatever the "pre-rendered
+   voice" setting says (that setting chooses between the library and the
+   phone's own voice for words, and the phone's voice is never used for a
+   single kana). On iPhone the audio session is asked for playback first, so
+   the ring/silent switch does not mute it. */
+function kcSession(t){ try{ if(navigator.audioSession) navigator.audioSession.type=t; }catch(e){} }
+function kcPlayClip(key){
+  kcSession("playback");
+  return audManifestReady().then(function(m){
+    var sp=m && audSpriteFor(key); if(!sp) return false;
+    return audLoad(sp).then(function(s){
+      if(!s || !s.idx[key]) return false;
+      var r=s.idx[key]; audNote(key);
+      return audPlayBytesWA(s.buf.slice(r[0], r[0]+r[1]));
+    });
+  }).catch(function(){ return false; });
+}
 function kcPlaySound(sid){
   if(!kcHasAudio(sid)) return Promise.resolve(false);
-  return Promise.race([audPlayWA("kj:"+kcSnd(sid).say), wait(4000).then(function(){ return false; })]);
+  return Promise.race([kcPlayClip("kj:"+kcSnd(sid).say), wait(4000).then(function(){ return false; })]);
 }
 function kcPlayWord(id){
   var c=IDX[id]; if(!c) return Promise.resolve(false);
@@ -464,6 +481,7 @@ function kcShowSay(st){
     KR.shownAt=0; kcNextBtn("Next");
   };
   kcEl("klSpeak").onclick=function(){
+    kcSession("auto");   // the recogniser needs the microphone back
     var stEl=kcEl("klSayState"); stEl.textContent="listening"; stEl.className="spstate prompt";
     kcEl("klSpeak").disabled=true;
     listenOnce(SP_LISTEN_MS, "ja-JP", "klSayState").then(function(r){
