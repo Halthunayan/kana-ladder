@@ -46,17 +46,18 @@ function kcAnyAudio(){ var ids=kcAudioIds(); return !!(ids && ids.length); }
 /* A single kana has no fallback voice, so it plays whatever the "pre-rendered
    voice" setting says (that setting chooses between the library and the
    phone's own voice for words, and the phone's voice is never used for a
-   single kana). On iPhone the audio session is asked for playback first, so
-   the ring/silent switch does not mute it. */
-function kcSession(t){ try{ if(navigator.audioSession) navigator.audioSession.type=t; }catch(e){} }
+   single kana). The iPhone audio session is left alone: asking for
+   "playback" turns the microphone off for the read-aloud step, Speaking
+   and Scenes. Every clip records when it ended, so a listen can wait for the
+   speaker to let go of the audio session first (kcMicReady). */
+function kcAudEnd(v){ try{ noteAudioPlayed(); }catch(e){} return v; }
 function kcPlayClip(key){
-  kcSession("playback");
   return audManifestReady().then(function(m){
     var sp=m && audSpriteFor(key); if(!sp) return false;
     return audLoad(sp).then(function(s){
       if(!s || !s.idx[key]) return false;
       var r=s.idx[key]; audNote(key);
-      return audPlayBytesWA(s.buf.slice(r[0], r[0]+r[1]));
+      return audPlayBytesWA(s.buf.slice(r[0], r[0]+r[1])).then(kcAudEnd);
     });
   }).catch(function(){ return false; });
 }
@@ -66,7 +67,21 @@ function kcPlaySound(sid){
 }
 function kcPlayWord(id){
   var c=IDX[id]; if(!c) return Promise.resolve(false);
-  return Promise.race([audPlayWA("wj:"+id), wait(5000).then(function(){ return false; })]);
+  return Promise.race([audPlayWA("wj:"+id).then(kcAudEnd), wait(5000).then(function(){ return false; })]);
+}
+/* Before the microphone opens: stop any clip still playing, suspend the
+   playback context, and leave a short gap after the last sound. Starting
+   the recogniser while WebKit still holds a playback session is what made
+   every listen after the first one end in "aborted" with nothing heard. */
+var KC_MIC_GAP=700;
+function kcMicReady(){
+  try{ audStop(); }catch(e){}
+  var ctx=AUD && AUD.ctx, sp=Promise.resolve();
+  try{ if(ctx && ctx.state==="running") sp=ctx.suspend().catch(function(){}); }catch(e){}
+  return sp.then(function(){
+    var since=Date.now()-(typeof LAST_AUDIO_AT==="number" ? LAST_AUDIO_AT : 0);
+    return since>=KC_MIC_GAP ? null : wait(KC_MIC_GAP-since);
+  });
 }
 
 /* ---- what he knows ---- */
@@ -481,10 +496,13 @@ function kcShowSay(st){
     KR.shownAt=0; kcNextBtn("Next");
   };
   kcEl("klSpeak").onclick=function(){
-    kcSession("auto");   // the recogniser needs the microphone back
-    var stEl=kcEl("klSayState"); stEl.textContent="listening"; stEl.className="spstate prompt";
+    var stEl=kcEl("klSayState"); stEl.textContent="getting ready"; stEl.className="spstate prompt";
     kcEl("klSpeak").disabled=true;
-    listenOnce(SP_LISTEN_MS, "ja-JP", "klSayState").then(function(r){
+    kcMicReady().then(function(){
+      if(g!==KR.gen) return null;
+      stEl.textContent="listening";
+      return listenOnce(SP_LISTEN_MS, "ja-JP", "klSayState");
+    }).then(function(r){
       if(g!==KR.gen) return;
       stEl.className="spstate"; kcEl("klSpeak").disabled=false;
       if(!r || !r.alts || !r.alts.length){ stEl.textContent="Nothing heard. Tap Speak to try again, or Skip."; return; }
