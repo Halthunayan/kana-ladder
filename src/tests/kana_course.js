@@ -308,10 +308,44 @@ console.log('\n9. the installed kana sounds: only clips that passed the accuracy
     ok(m.ids.length>=60 && bad.length===0,'the library lists '+m.ids.length+' gated sounds, each with its source');
     const r=await p.evaluate(async ids=>{ const out={}; for(const id of ids.slice(0,6)){ const b=await __kl.audClipBytes('kj:'+id); out[id]=b ? (b.byteLength||b.length||0) : 0; } return out; }, m.ids);
     ok(Object.values(r).every(n=>n>500),'clips load from the sprite ('+JSON.stringify(r)+')');
+    const dec=await p.evaluate(async ids=>{ const ctx=new (window.AudioContext||window.webkitAudioContext)(), bad=[]; for(const id of ids){ const b=await __kl.audClipBytes('kj:'+id); const u=b && new Uint8Array(b.slice(0,3)); if(!b || String.fromCharCode(u[0],u[1],u[2])!=='ID3'){ bad.push(id+':start'); continue; } try{ await ctx.decodeAudioData(b.slice(0)); }catch(e){ bad.push(id); } } return bad; }, m.ids);
+    ok(dec.length===0,'every one of the '+m.ids.length+' clips starts on its own boundary and decodes ('+dec.slice(0,6).join(', ')+')');
     const t=await p.evaluate(()=>{ const KC=__kl.KC, ids=__kl.AUD.man.kana.ids; const li=KC.lessons.findIndex(l=>l.new.some(s=>ids.indexOf(KC.sounds[s].say)<0) && l.new.some(s=>ids.indexOf(KC.sounds[s].say)>=0));
       if(li<0) return null; __kl.kcStart('lesson',li); const out=[]; __kl.KR.steps.forEach((s,i)=>{ if(s.t!=='teach') return; __kl.KR.i=i-1; __kl.KR.shownAt=0; document.getElementById('klNext').click(); out.push([s.sid, ids.indexOf(KC.sounds[s.sid].say)>=0, !!document.getElementById('klHear')]); }); return out; });
     ok(t && t.every(x=>x[1]===x[2]),'"Hear it" appears exactly for the sounds with a gated clip ('+JSON.stringify(t)+')');
   }
+  ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
+  await ctx.close();
+}
+
+console.log('\n10. read it aloud: the microphone waits for the speaker, every attempt listens');
+{
+  const ctx=await b.newContext({viewport:{width:375,height:580}});
+  await ctx.addInitScript(s=>{ localStorage.setItem('kanaladder.v1',JSON.stringify(s)); }, base());
+  await ctx.addInitScript(fakeRec);
+  const {p, errs}=await open(ctx);
+  const r=await p.evaluate(async()=>{
+    const k=__kl, KC=k.KC; let li=-1, si=-1;
+    for(let i=0;i<KC.lessons.length && li<0;i++){ k.kcStart('lesson',i); const j=k.KR.steps.findIndex(s=>s.t==='say'); if(j>=0){ li=i; si=j; } }
+    if(li<0) return null;
+    const out={lesson:KC.lessons[li].id, tries:[]};
+    k.KR.i=si-1; k.KR.shownAt=0; document.getElementById('klNext').click();
+    for(let n=0;n<3;n++){
+      k.noteAudioPlayed();                       // a word has just finished playing
+      const t0=Date.now(); document.getElementById(n ? 'klSpeak2' : 'klSpeak').click();
+      if(n){ await new Promise(r=>setTimeout(r,50)); document.getElementById('klSpeak').click(); }
+      const early=!!window.__recActive;           // must not listen at once
+      await new Promise(r=>{ const iv=setInterval(()=>{ if(window.__recActive){ clearInterval(iv); r(); } }, 20); setTimeout(()=>{ clearInterval(iv); r(); }, 3000); });
+      const waited=Date.now()-t0, on=!!window.__recActive;
+      const said=window.__recSay(KC && k.KR.steps[k.KR.i] ? (k.DECK.find(c=>c.id===k.KR.steps[k.KR.i].id)||{}).kana||'' : '');
+      await new Promise(r=>setTimeout(r,80));
+      out.tries.push({early, on, waited, said, fb:(document.getElementById('klFb')||{}).textContent||''});
+    }
+    return out;
+  });
+  ok(r && r.tries.length===3,'a lesson with a read-aloud step was found ('+(r&&r.lesson)+')');
+  ok(r && r.tries.every(t=>!t.early && t.on && t.waited>=600),'each Speak waits for the last sound to clear before the mic opens ('+(r?r.tries.map(t=>t.waited+'ms').join(', '):'')+')');
+  ok(r && r.tries.every(t=>t.said && /It is/.test(t.fb)),'all three attempts in a row are heard and graded, not only the first');
   ok(errs.length===0,'no page errors ('+errs.join('; ')+')');
   await ctx.close();
 }
